@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # =============================================================================
-# CROSSFIRE — Experiment Runner
-# Runs a single benchmark configuration and saves results
+# CROSSFIRE v2 — Experiment Runner
+# Runs a single benchmark configuration from the ablation matrix (C0-C6)
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,71 +14,97 @@ usage() {
 Usage: $(basename "$0") [OPTIONS]
 
 Options:
+    --config CONFIG     Ablation config (c0|c1|c2|c3|c4|c5|c6) (required)
     --model PATH        Path to GGUF model file (required)
-    --context SIZE      Context size in tokens (default: 2048)
-    --kv-compress ALG   KV cache compression algorithm (none|turbo3|turbo4)
-    --distributed       Enable distributed mode (prefill/decode split)
+    --context SIZE      Context size in tokens (default: 8192)
+    --draft-model PATH  Path to ANE draft model (for c1/c5/c6)
     --output DIR        Output directory (default: results/)
     -h, --help          Show this help
 
+Ablation Configs:
+    c0  Pure EXO baseline (5090 prefill + Mac GPU decode)
+    c1  ANE speculative decode (draft 0.6B on ANE)
+    c2  ANE prefill offload
+    c3  Mac-only disaggregated (no 5090)
+    c4  TQ+ compression only (EXO + TQ4_1S + turbo3)
+    c5  Full stack: EXO + ANE draft + TQ+ (headline result)
+    c6  72B stretch goal
+
 Examples:
-    # Single-node baseline
-    $(basename "$0") --model models/qwen3.5-27b-q8_0.gguf --context 2048
+    # EXO baseline
+    $(basename "$0") --config c0 --model models/qwen3.5-27b-q8_0.gguf
 
-    # With KV cache compression
-    $(basename "$0") --model models/qwen3.5-27b-tq4_1s.gguf --context 8192 --kv-compress turbo3
+    # ANE speculative decode
+    $(basename "$0") --config c1 --model models/qwen3.5-27b-q8_0.gguf \\
+        --draft-model models/qwen3.5-0.6b-ane/
 
-    # Distributed mode
-    $(basename "$0") --model models/qwen3.5-27b-tq4_1s.gguf --distributed
+    # Full stack (headline)
+    $(basename "$0") --config c5 --model models/qwen3.5-27b-tq4_1s.gguf \\
+        --draft-model models/qwen3.5-0.6b-ane/ --context 32768
 EOF
     exit 0
 }
 
 # --- Defaults ---
+CONFIG=""
 MODEL=""
-CONTEXT=2048
-KV_COMPRESS="none"
-DISTRIBUTED=false
+CONTEXT=8192
+DRAFT_MODEL=""
 OUTPUT_DIR="$PROJECT_ROOT/results"
 
 # --- Parse args ---
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --config) CONFIG="$2"; shift 2 ;;
         --model) MODEL="$2"; shift 2 ;;
         --context) CONTEXT="$2"; shift 2 ;;
-        --kv-compress) KV_COMPRESS="$2"; shift 2 ;;
-        --distributed) DISTRIBUTED=true; shift ;;
+        --draft-model) DRAFT_MODEL="$2"; shift 2 ;;
         --output) OUTPUT_DIR="$2"; shift 2 ;;
         -h|--help) usage ;;
         *) echo "Unknown option: $1"; usage ;;
     esac
 done
 
+if [ -z "$CONFIG" ]; then
+    echo "ERROR: --config is required"
+    usage
+fi
+
 if [ -z "$MODEL" ]; then
     echo "ERROR: --model is required"
     usage
 fi
 
-if [ ! -f "$MODEL" ]; then
-    echo "ERROR: Model file not found: $MODEL"
+if [ ! -f "$MODEL" ] && [ ! -d "$MODEL" ]; then
+    echo "ERROR: Model not found: $MODEL"
     exit 1
 fi
+
+# Validate ANE configs have draft model
+case "$CONFIG" in
+    c1|c5|c6)
+        if [ -z "$DRAFT_MODEL" ]; then
+            echo "ERROR: Config $CONFIG requires --draft-model (ANE draft model path)"
+            exit 1
+        fi
+        ;;
+esac
 
 mkdir -p "$OUTPUT_DIR"
 
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 MODEL_NAME="$(basename "$MODEL" .gguf)"
-RUN_ID="${MODEL_NAME}_ctx${CONTEXT}_kv${KV_COMPRESS}_${TIMESTAMP}"
+RUN_ID="${CONFIG}_${MODEL_NAME}_ctx${CONTEXT}_${TIMESTAMP}"
 
-echo "=== CROSSFIRE Experiment ==="
+echo "=== CROSSFIRE v2 Experiment ==="
 echo "Run ID:      $RUN_ID"
+echo "Config:      $CONFIG"
 echo "Model:       $MODEL"
 echo "Context:     $CONTEXT"
-echo "KV Compress: $KV_COMPRESS"
-echo "Distributed: $DISTRIBUTED"
+echo "Draft Model: ${DRAFT_MODEL:-none}"
 echo "Output:      $OUTPUT_DIR"
 echo ""
 
-# TODO: Implement actual benchmark execution
+# TODO: Implement actual benchmark execution per ablation config
 echo "Experiment runner scaffold — implementation pending."
 echo "Run ID $RUN_ID would be saved to $OUTPUT_DIR/$RUN_ID.json"

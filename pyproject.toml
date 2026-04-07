@@ -1,14 +1,14 @@
 [project]
 name = "crossfire"
 version = "0.1.0"
-description = "Heterogeneous distributed LLM inference with stacked weight and KV cache compression"
+description = "Heterogeneous distributed LLM inference with ANE compute integration and stacked compression"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
 authors = [
     {name = "Murai Labs", email = "ram@murailabs.com"},
 ]
-keywords = ["llm", "inference", "distributed", "quantization", "compression"]
+keywords = ["llm", "inference", "distributed", "quantization", "compression", "ane", "apple-neural-engine"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",

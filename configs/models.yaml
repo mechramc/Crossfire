@@ -1,10 +1,11 @@
-# Model definitions for CROSSFIRE experiments
+# Model definitions for CROSSFIRE v2 experiments
 # Paths are relative to the models/ directory (gitignored)
 
 models:
   qwen3.5-27b:
     name: "Qwen 3.5 27B"
     parameters: 27B
+    role: primary
     variants:
       q8_0:
         file: "qwen3.5-27b-q8_0.gguf"
@@ -12,25 +13,41 @@ models:
       tq4_1s:
         file: "qwen3.5-27b-tq4_1s.gguf"
         size_gb: 19.1
-    eval_contexts: [2048, 8192, 16384]
+    eval_contexts: [8192, 16384, 32768]
+
+  qwen3.5-0.6b:
+    name: "Qwen 3.5 0.6B"
+    parameters: 0.6B
+    role: ane_draft
+    source: "huggingface"  # HuggingFace weights, converted to ANE via ANEMLL
+    ane_config:
+      backend: anemll
+      max_context: 2048
+      expected_tok_s: 50  # 47-62 tok/s per ANEMLL benchmarks
 
   qwen2.5-72b:
     name: "Qwen 2.5 72B"
     parameters: 72B
-    variants:
-      tq4_1s:
-        file: "qwen2.5-72b-tq4_1s.gguf"
-        size_gb: 48.0
-    eval_contexts: [2048, 8192]
-
-  phi-4-14b:
-    name: "Phi-4 14B"
-    parameters: 14B
+    role: stretch_goal
     variants:
       q8_0:
-        file: "phi-4-14b-q8_0.gguf"
-        size_gb: 14.2
-    eval_contexts: [2048, 4096]
+        file: "qwen2.5-72b-q8_0.gguf"
+        size_gb: 72.0
+      tq4_1s:
+        file: "qwen2.5-72b-tq4_1s.gguf"
+        size_gb: 45.8
+    notes: "Requires distributed — fits neither machine alone at Q8_0"
+    eval_contexts: [8192, 16384]
 
 # Standard evaluation dataset
 eval_dataset: "wikitext-2-raw-v1"
+
+# Ablation matrix configs (C0-C6)
+ablation:
+  c0: { pipeline: "exo", ane: "idle", tq_plus: false, description: "Pure EXO baseline" }
+  c1: { pipeline: "exo", ane: "draft_0.6b", tq_plus: false, description: "ANE speculative decode" }
+  c2: { pipeline: "exo", ane: "prefill", tq_plus: false, description: "ANE prefill offload" }
+  c3: { pipeline: "mac_only", ane: "prefill", tq_plus: false, description: "Mac-only disaggregated" }
+  c4: { pipeline: "exo", ane: "idle", tq_plus: true, description: "TQ+ compression only" }
+  c5: { pipeline: "exo", ane: "draft_0.6b", tq_plus: true, description: "Full stack (headline)" }
+  c6: { pipeline: "exo_72b", ane: "draft_0.6b", tq_plus: true, description: "72B stretch goal" }

@@ -7,6 +7,7 @@
 # -----------------------------------------------------------------------------
 tasks.md
 checkpoint.md
+status.md
 *.docx
 notes/
 drafts/
@@ -44,6 +45,8 @@ models/
 *.pt
 *.pth
 *.onnx
+*.mlmodelc
+*.mlpackage
 
 # Raw benchmark data (processed results ARE tracked)
 results/raw/
