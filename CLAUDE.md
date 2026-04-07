@@ -1,14 +1,14 @@
-# CROSSFIRE v2
+# CROSSFIRE-X
 
 Heterogeneous distributed LLM inference with ANE compute integration and stacked compression.
 
 ## Project Overview
 
-CROSSFIRE v2 lights up the Apple Neural Engine (ANE) as a compute target inside an
+CROSSFIRE-X lights up the Apple Neural Engine (ANE) as a compute target inside an
 EXO-orchestrated distributed inference pipeline spanning NVIDIA CUDA and Apple Silicon.
 
 **Core thesis:** Every Mac in an EXO cluster leaves ~19 TFLOPS of dedicated fp16 ANE
-compute completely dark. CROSSFIRE v2 asks: can we add the ANE as a compute target
+compute completely dark. CROSSFIRE-X asks: can we add the ANE as a compute target
 inside an EXO pipeline, and does it improve throughput, latency, or power efficiency?
 
 **Secondary question:** Does stacking TurboQuant+ compression (TQ4_1S weights + turbo3
