@@ -1,0 +1,37 @@
+# Hardware profiles for CROSSFIRE distributed inference
+
+nodes:
+  pc:
+    name: "PC (RTX 5090)"
+    host: "192.168.1.100"
+    port: 8080
+    role: prefill
+    specs:
+      gpu: "RTX 5090"
+      gpu_vram_gb: 32
+      gpu_bandwidth_tb_s: 1.8
+      gpu_tflops_fp16: 209
+      system_ram_gb: 64
+    llama_cpp:
+      gpu_layers: 99
+      threads: 16
+      batch_size: 2048
+
+  mac:
+    name: "Mac Studio (M4 Max)"
+    host: "192.168.1.101"
+    port: 8080
+    role: decode
+    specs:
+      gpu: "M4 Max (40-core)"
+      unified_memory_gb: 64
+      bandwidth_gb_s: 546
+    llama_cpp:
+      gpu_layers: 99
+      threads: 12
+      batch_size: 512
+
+network:
+  type: "thunderbolt4"
+  bandwidth_gbps: 40
+  activation_size_kb: 256

@@ -1,0 +1,36 @@
+# Model definitions for CROSSFIRE experiments
+# Paths are relative to the models/ directory (gitignored)
+
+models:
+  qwen3.5-27b:
+    name: "Qwen 3.5 27B"
+    parameters: 27B
+    variants:
+      q8_0:
+        file: "qwen3.5-27b-q8_0.gguf"
+        size_gb: 26.6
+      tq4_1s:
+        file: "qwen3.5-27b-tq4_1s.gguf"
+        size_gb: 19.1
+    eval_contexts: [2048, 8192, 16384]
+
+  qwen2.5-72b:
+    name: "Qwen 2.5 72B"
+    parameters: 72B
+    variants:
+      tq4_1s:
+        file: "qwen2.5-72b-tq4_1s.gguf"
+        size_gb: 48.0
+    eval_contexts: [2048, 8192]
+
+  phi-4-14b:
+    name: "Phi-4 14B"
+    parameters: 14B
+    variants:
+      q8_0:
+        file: "phi-4-14b-q8_0.gguf"
+        size_gb: 14.2
+    eval_contexts: [2048, 4096]
+
+# Standard evaluation dataset
+eval_dataset: "wikitext-2-raw-v1"
