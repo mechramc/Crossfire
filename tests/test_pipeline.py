@@ -32,21 +32,15 @@ def _make_pipeline(
             ComputeTargetConfig(target=ComputeTarget.T2_METAL_GPU, role=NodeRole.DECODE)
         )
     if draft:
-        targets_mac.append(
-            ComputeTargetConfig(target=ComputeTarget.T3_ANE, role=NodeRole.DRAFT)
-        )
+        targets_mac.append(ComputeTargetConfig(target=ComputeTarget.T3_ANE, role=NodeRole.DRAFT))
     if rdma:
-        targets_pc.append(
-            ComputeTargetConfig(target=ComputeTarget.T5_RDMA, role=NodeRole.PREFILL)
-        )
+        targets_pc.append(ComputeTargetConfig(target=ComputeTarget.T5_RDMA, role=NodeRole.PREFILL))
 
     nodes = [
         NodeConfig(name="PC", host="192.168.1.100", port=8080, targets=targets_pc),
         NodeConfig(name="Mac", host="192.168.1.101", port=8080, targets=targets_mac),
     ]
-    return PipelineConfig(
-        nodes=nodes, rdma_enabled=rdma, speculative_decode=speculative
-    )
+    return PipelineConfig(nodes=nodes, rdma_enabled=rdma, speculative_decode=speculative)
 
 
 def test_valid_pipeline():

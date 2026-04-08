@@ -10,6 +10,7 @@ from crossfire.ane.power import (
     ANE_TFLOPS_FP16,
     PowerSnapshot,
 )
+from crossfire.ane.speculative import run_speculative_step
 
 
 def test_draft_model_config_validates_context():
@@ -66,3 +67,74 @@ def test_ane_constants():
     assert ANE_TFLOPS_FP16 == 19.0
     assert ANE_SRAM_CLIFF_MB == 32
     assert ANE_ACTIVE_WATTS_MIN < ANE_ACTIVE_WATTS_MAX
+
+
+class StubDraftModel:
+    def __init__(self, tokens: list[int]) -> None:
+        self._tokens = tokens
+
+    def generate_draft(
+        self,
+        prompt_tokens: list[int],
+        *,
+        max_tokens: int | None = None,
+    ) -> DraftResult:
+        del prompt_tokens
+        tokens = self._tokens if max_tokens is None else self._tokens[:max_tokens]
+        return DraftResult(tokens=tokens, logits_shape=(len(tokens), 32000), elapsed_ms=4.5)
+
+
+class StubVerifier:
+    def __init__(self, verified_tokens: list[int]) -> None:
+        self._verified_tokens = verified_tokens
+
+    def verify_tokens(self, prompt_tokens: list[int], draft_tokens: list[int]) -> list[int]:
+        del prompt_tokens
+        del draft_tokens
+        return self._verified_tokens
+
+
+def test_run_speculative_step_accepts_full_draft_and_appends_verifier_token():
+    result = run_speculative_step(
+        [101, 102],
+        draft_model=StubDraftModel([201, 202]),
+        verifier=StubVerifier([201, 202, 203]),
+    )
+
+    assert result.accepted_tokens == [201, 202]
+    assert result.accepted_count == 2
+    assert result.committed_tokens == [201, 202, 203]
+    assert result.verifier_generated_token == 203
+    assert result.rejected is False
+
+
+def test_run_speculative_step_rejects_on_first_mismatch():
+    result = run_speculative_step(
+        [101, 102],
+        draft_model=StubDraftModel([201, 202, 203]),
+        verifier=StubVerifier([201, 999, 1000]),
+    )
+
+    assert result.accepted_tokens == [201]
+    assert result.accepted_count == 1
+    assert result.committed_tokens == [201, 999]
+    assert result.verifier_generated_token == 999
+    assert result.rejected is True
+
+
+def test_run_speculative_step_requires_draft_tokens():
+    with pytest.raises(ValueError, match="Draft model returned no tokens"):
+        run_speculative_step(
+            [101],
+            draft_model=StubDraftModel([]),
+            verifier=StubVerifier([301]),
+        )
+
+
+def test_run_speculative_step_requires_verifier_tokens():
+    with pytest.raises(ValueError, match="Verifier returned no authoritative tokens"):
+        run_speculative_step(
+            [101],
+            draft_model=StubDraftModel([201]),
+            verifier=StubVerifier([]),
+        )
