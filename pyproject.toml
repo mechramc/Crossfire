@@ -1,7 +1,7 @@
 [project]
 name = "crossfire"
-version = "0.1.0"
-description = "Heterogeneous distributed LLM inference with ANE compute integration and stacked compression"
+version = "0.2.0"
+description = "Self-optimizing heterogeneous distributed LLM inference across GPU, ANE, and compression"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"

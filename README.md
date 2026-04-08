@@ -1,10 +1,10 @@
-# CROSSFIRE v2
+# CROSSFIRE-X
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 **Lighting up the Neural Engine in a distributed inference pipeline.**
 
-CROSSFIRE v2 integrates the Apple Neural Engine (ANE) as a compute target inside an
+CROSSFIRE-X integrates the Apple Neural Engine (ANE) as a compute target inside an
 [EXO](https://github.com/exo-explore/exo)-orchestrated distributed inference pipeline
 spanning NVIDIA CUDA and Apple Silicon — with TurboQuant+ compression stacked on top.
 
@@ -19,7 +19,7 @@ spanning NVIDIA CUDA and Apple Silicon — with TurboQuant+ compression stacked 
 | T5: RDMA | Thunderbolt 5 | KV cache streaming (3us latency) | ~2W |
 
 **Core thesis:** Every Mac in an EXO cluster leaves ~19 TFLOPS of ANE compute dark.
-CROSSFIRE v2 lights it up — and measures whether it helps.
+CROSSFIRE-X lights it up — and measures whether it helps.
 
 ## Hardware Requirements
 
@@ -85,12 +85,12 @@ ruff check .
 
 > Benchmark results will be published here as experiments complete.
 
-| Config | EXO Pipeline | ANE | TQ+ | tok/s | Power (W) |
+| Policy | EXO Pipeline | ANE | TQ+ | tok/s | Power (W) |
 |--------|-------------|-----|-----|-------|-----------|
-| C0: EXO baseline | 5090 + Mac GPU | Idle | None | — | — |
-| C1: ANE speculative | 5090 + Mac GPU | Draft 0.6B | None | — | — |
-| C5: Full stack | 5090 + Mac GPU | Draft 0.6B | TQ4_1S + turbo3 | — | — |
-| C6: 72B stretch | 5090 + Mac GPU (72B) | Draft 0.6B | TQ4_1S + turbo3 | — | — |
+| P0: Single-node fallback | Best single node | Idle | None | — | — |
+| P1: Distributed baseline | 5090 + Mac GPU | Idle | None | — | — |
+| P2: ANE speculative | 5090 + Mac GPU | Draft 0.6B | None | — | — |
+| P5: Full stack | 5090 + Mac GPU | Draft 0.6B | TQ4_1S + turbo3 | — | — |
 
 ## Key Dependencies
 
@@ -117,7 +117,7 @@ If you use CROSSFIRE in your research, please cite:
 
 ```bibtex
 @software{crossfire2026,
-  title = {CROSSFIRE v2: Lighting Up the Neural Engine in a Distributed Inference Pipeline},
+  title = {CROSSFIRE-X: Lighting Up the Neural Engine in a Distributed Inference Pipeline},
   author = {Murai Labs},
   year = {2026},
   url = {https://github.com/murai-labs/crossfire}

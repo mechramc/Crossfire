@@ -1,8 +1,8 @@
 """Benchmark metric collection and reporting.
 
 Collects perplexity, throughput, memory, and power metrics from inference runs
-and formats them for comparison tables. Supports the CROSSFIRE v2 ablation
-matrix (C0-C6) with per-target power tracking.
+and formats them for comparison tables. The current schema still supports the
+pre-AutoPilot ablation matrix with per-target power tracking.
 """
 
 from __future__ import annotations

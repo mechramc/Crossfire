@@ -1,6 +1,6 @@
 """EXO-orchestrated pipeline across heterogeneous compute targets.
 
-Manages the five compute targets in a CROSSFIRE v2 pipeline:
+Manages the five compute targets in a CROSSFIRE-X pipeline:
 T1 (CUDA GPU), T2 (Metal GPU), T3 (ANE), T4 (CPU/SME), T5 (RDMA).
 EXO handles topology-aware auto-parallel and disaggregated prefill/decode.
 """
@@ -12,7 +12,7 @@ from enum import Enum
 
 
 class ComputeTarget(Enum):
-    """Compute targets in the CROSSFIRE v2 pipeline."""
+    """Compute targets in the CROSSFIRE-X pipeline."""
 
     T1_CUDA_GPU = "cuda_gpu"
     T2_METAL_GPU = "metal_gpu"

@@ -1,3 +1,3 @@
-"""CROSSFIRE: Heterogeneous distributed LLM inference with stacked compression."""
+"""CROSSFIRE-X: Self-optimizing heterogeneous distributed LLM inference."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

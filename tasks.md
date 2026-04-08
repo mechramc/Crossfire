@@ -1,6 +1,6 @@
 # CROSSFIRE-X Task Ledger
 
-Last updated: 2026-04-07
+Last updated: 2026-04-08
 Purpose: Atomic project task list grounded in the current repository state.
 Rule: Only mark a task done when the code, file, or artifact exists in this repo or the required hardware action has been executed and recorded.
 
@@ -27,12 +27,12 @@ Rule: Only mark a task done when the code, file, or artifact exists in this repo
 ## Phase 1 - Rename And Release Alignment
 
 - [x] T-0101 Rename internal planning docs to `CROSSFIRE-X` in `CLAUDE.md`
-- [ ] T-0102 Rename public `README.md` from `CROSSFIRE v2` to `CROSSFIRE-X`
-- [ ] T-0103 Update `README.md` result table from `C0-C6` naming to `P0-P5` policy naming
-- [ ] T-0104 Update `pyproject.toml` version from `0.1.0` to the intended next release
-- [ ] T-0105 Update `pyproject.toml` description to include the self-optimizing / AutoPilot direction if still intended
-- [ ] T-0106 Rename source docstrings that still say `CROSSFIRE v2`
-- [ ] T-0107 Update `src/crossfire/__init__.py` package docstring/version to match release plan
+- [x] T-0102 Rename public `README.md` from `CROSSFIRE v2` to `CROSSFIRE-X`
+- [x] T-0103 Update `README.md` result table from `C0-C6` naming to `P0-P5` policy naming
+- [x] T-0104 Update `pyproject.toml` version from `0.1.0` to the intended next release
+- [x] T-0105 Update `pyproject.toml` description to include the self-optimizing / AutoPilot direction if still intended
+- [x] T-0106 Rename source docstrings that still say `CROSSFIRE v2`
+- [x] T-0107 Update `src/crossfire/__init__.py` package docstring/version to match release plan
 
 ## Phase 2 - Core Library Scaffolds Already In Repo
 
@@ -96,14 +96,14 @@ Rule: Only mark a task done when the code, file, or artifact exists in this repo
 
 ## Phase 5 - AutoPilot / Policy Refactor Roadmap
 
-- [ ] T-0501 Create `src/crossfire/autopilot/__init__.py`
-- [ ] T-0502 Implement query classifier module
-- [ ] T-0503 Implement execution policy registry for `P0-P5`
-- [ ] T-0504 Implement UCB1 bandit
-- [ ] T-0505 Implement Thompson sampling alternative
-- [ ] T-0506 Implement reward calculation
-- [ ] T-0507 Implement decision logger
-- [ ] T-0508 Implement `AutoPilot` orchestrator
+- [x] T-0501 Create `src/crossfire/autopilot/__init__.py`
+- [x] T-0502 Implement query classifier module
+- [x] T-0503 Implement execution policy registry for `P0-P5`
+- [x] T-0504 Implement UCB1 bandit
+- [x] T-0505 Implement Thompson sampling alternative
+- [x] T-0506 Implement reward calculation
+- [x] T-0507 Implement decision logger
+- [x] T-0508 Implement `AutoPilot` orchestrator
 - [ ] T-0509 Add `execution_policy` to pipeline configuration
 - [ ] T-0510 Replace `ablation_config` metrics with `execution_policy`
 - [ ] T-0511 Add new benchmark fields: tok/W, acceptance rate, TTFT, prefill tok/s, decode tok/s
@@ -169,6 +169,6 @@ Rule: Only mark a task done when the code, file, or artifact exists in this repo
 
 ## Immediate Priorities
 
-1. Finish rename/release alignment in Phase 1.
-2. Finish the public/package/source rename so the repository is consistently `CROSSFIRE-X`.
-3. Decide whether the AutoPilot / policy refactor is still the active direction, then execute Phase 5 against a consistent naming baseline.
+1. Update pipeline and metrics schemas from ablation naming to execution-policy naming.
+2. Add the first dedicated AutoPilot unit tests for classifier, bandits, reward, logging, and orchestration.
+3. Add `configs/autopilot.yaml` and wire configuration loading into the new AutoPilot layer.

@@ -1,13 +1,13 @@
 # CROSSFIRE-X Status
 
-Last updated: 2026-04-07
+Last updated: 2026-04-08
 Branch: main
-Latest commit: ee67abb (`feat: add CROSSFIRE-X specs and ANE speculative scaffolding`)
-Tracker state: reconciled against the current repository contents on disk
+Latest commit: cbb7adc (`add status, checkpoint, tasks files`)
+Tracker state: reconciled against the current repository contents on disk after initial AutoPilot primitives were added
 
 ## Summary
 
-The repository has a solid scaffold for the ANE, distributed pipeline, metrics, benchmark, config, script, and test layers. The project is not yet in a runnable experimental state: the benchmark execution paths are still placeholders, the AutoPilot/policy layer does not exist yet, and the repo is still split between `CROSSFIRE-X` planning docs and `CROSSFIRE v2` public/package identifiers.
+The repository has a solid scaffold for the ANE, distributed pipeline, metrics, benchmark, config, script, and test layers. The project is not yet in a runnable experimental state: benchmark execution paths are still placeholders and the pipeline/metrics layers have not yet been migrated to execution-policy-native schemas. Phase 1 rename/release alignment is complete, and the first AutoPilot layer now includes both primitives and a top-level orchestrator.
 
 ## Completed In Repo
 
@@ -19,6 +19,8 @@ The repository has a solid scaffold for the ANE, distributed pipeline, metrics, 
 - Benchmark scaffolds exist: `perplexity.py`, `throughput.py`, `memory.py`
 - Three test modules exist: `test_ane.py`, `test_pipeline.py`, `test_metrics.py`
 - Tracking files now reflect repo reality instead of roadmap-only assumptions
+- Phase 1 rename/release alignment is complete for `README.md`, `pyproject.toml`, and `src/crossfire/__init__.py`
+- Initial AutoPilot layer now exists: query classifier, execution-policy registry, UCB1 bandit, Thompson bandit, reward calculation, decision logger, and top-level orchestrator
 
 ## Partially Implemented
 
@@ -27,31 +29,32 @@ The repository has a solid scaffold for the ANE, distributed pipeline, metrics, 
 - `benchmarks/perplexity.py`: config and validation exist, execution path still raises `NotImplementedError`
 - `benchmarks/throughput.py`: config and validation exist, execution path still raises `NotImplementedError`
 - `src/crossfire/utils/metrics.py`: current schema supports ablation-style reporting, not the planned `P0-P5` policy schema
+- `src/crossfire/autopilot/`: orchestrator exists, but persistence/config wiring and dedicated unit tests are still missing
 
 ## Not Started
 
-- `src/crossfire/autopilot/` package
 - `configs/autopilot.yaml`
 - Dashboard/TUI layer
 - Hardware bring-up and calibration artifacts under `results/`
-- Final public rename / release alignment
 
 ## Current Mismatches To Fix
 
-- `README.md` still identifies the project as `CROSSFIRE v2`
-- `pyproject.toml` is still version `0.1.0`
-- `src/crossfire/__init__.py`, `pipeline.py`, and `metrics.py` still carry `v2` wording
-- Public/docs naming and code naming are not yet aligned with the `CROSSFIRE-X` plan
+- `src/crossfire/utils/metrics.py` still uses the ablation-style `ablation_config` schema instead of execution policies
+- `README.md` results are now policy-named, but benchmark code and metrics are not yet policy-native
+- `src/crossfire/distributed/pipeline.py` has no `execution_policy` concept yet
+- No dedicated AutoPilot unit tests exist yet; current verification is smoke-based plus existing repo checks
+- `configs/autopilot.yaml` does not exist yet, so the orchestrator is still code-configured only
+- The package remains named `crossfire`; no package/module rename has been attempted
 
 ## Verification
 
+- `.venv` created locally for isolated verification
 - `pytest`: passed (`21 passed`)
 - `ruff check .`: passed
 - `ruff format --check .`: passed
-- Note: pytest and ruff emitted cache write warnings because `.pytest_cache` / `.ruff_cache` were not writable in this environment; the checks themselves still passed
 
 ## Immediate Next Work
 
-1. Finish the rename/release alignment tasks in Phase 1.
-2. Update the public/package/source identifiers so the repository is consistently `CROSSFIRE-X`.
-3. Start the AutoPilot/policy refactor only after the naming split is resolved.
+1. Update pipeline and metrics schemas from ablation naming to execution-policy naming.
+2. Add the first dedicated AutoPilot unit tests for classifier, bandits, reward, logging, and orchestration.
+3. Add `configs/autopilot.yaml` and wire configuration loading into the new AutoPilot layer.

@@ -5,6 +5,83 @@ Rule: update this file before every `git push`.
 
 ---
 
+## Session 10 - 2026-04-08: AutoPilot orchestrator completed
+
+### What was done
+- Completed `T-0508`
+- Added `src/crossfire/autopilot/autopilot.py`
+- Implemented `AutoPilot` with:
+  - per-query-class bandit instances
+  - query classification via `classify_query()`
+  - hardware-aware policy filtering
+  - UCB1 or Thompson backend selection
+  - reward computation and bandit updates
+  - optional JSONL decision logging
+  - serializable policy-stat reporting
+- Added supporting orchestration dataclasses and enums:
+  - `BanditType`
+  - `AutoPilotConfig`
+  - `AutoPilotSelection`
+  - `AutoPilotOutcome`
+  - `AutoPilotBaselines`
+- Exported the new orchestrator types from `src/crossfire/autopilot/__init__.py`
+- Updated `tasks.md` and `status.md` to reflect the new orchestration state
+
+### Verification approach
+- Ran an end-to-end smoke check for classify -> select policy -> record outcome -> decision log write
+- Re-ran repo-wide `pytest`, `ruff check .`, and `ruff format --check .`
+
+### State at end of session
+- `T-0508` is complete and verified
+- The next major work is schema migration in `pipeline.py` and `metrics.py`, followed by dedicated AutoPilot unit tests and config wiring
+
+---
+
+## Session 9 - 2026-04-08: AutoPilot primitives batch 1
+
+### What was done
+- Completed `T-0501` through `T-0507`
+- Created `src/crossfire/autopilot/__init__.py`
+- Added `query_classifier.py` with `QueryClass`, `QueryFeatures`, and `classify_query()`
+- Added `policy.py` with `ExecutionPolicy`, `PolicyConfig`, `HardwareAvailability`, and policy availability filtering
+- Added `bandit.py` with `ArmStats`, `UCB1Bandit`, `ThompsonArmStats`, and `ThompsonBandit`
+- Added `reward.py` with reward weights, inputs, breakdown, and normalized reward computation
+- Added `logger.py` with `DecisionRecord` and append-only JSONL logging
+- Exported all new AutoPilot primitives from the package root
+- Updated `tasks.md` and `status.md` to reflect the new AutoPilot baseline
+
+### Verification approach
+- Ran a verification gate after each task before proceeding to the next one
+- Used targeted smoke checks for imports, classification, policy filtering, bandit updates, reward math, and JSONL logging
+- Re-ran repo-wide `pytest`, `ruff check .`, and `ruff format --check .` after each completed task
+
+### State at end of session
+- Initial AutoPilot primitives are now present and verified
+- The next AutoPilot step is `T-0508`: implement the orchestrator that composes classifier, bandits, policies, rewards, and logging
+- Pipeline/metrics schemas and dedicated AutoPilot tests remain pending
+
+---
+
+## Session 8 - 2026-04-07: Phase 1 rename/release alignment completed
+
+### What was done
+- Completed `T-0102` through `T-0107`
+- Renamed public `README.md` references from `CROSSFIRE v2` to `CROSSFIRE-X`
+- Updated the README results table from ablation config labels to `P0`, `P1`, `P2`, and `P5` policy labels
+- Bumped package version from `0.1.0` to `0.2.0`
+- Updated package metadata description to reflect the self-optimizing / AutoPilot direction
+- Rewrote remaining source docstrings carrying `CROSSFIRE v2` wording
+- Updated `src/crossfire/__init__.py` docstring and version to match the release plan
+- Created a local `.venv` and installed dev dependencies there to complete verification
+- Updated `tasks.md` and `status.md` to reflect the completed Phase 1 state
+
+### State at end of session
+- Phase 1 rename/release alignment is complete
+- Verification completed in `.venv`: `pytest` (`21 passed`), `ruff check .`, and `ruff format --check .`
+- Next work shifts to Phase 5 AutoPilot/policy implementation and schema refactoring
+
+---
+
 ## Session 7 - 2026-04-07: Tracker reconciliation and push-gate rules
 
 ### What was done
