@@ -1,140 +1,102 @@
-# CROSSFIRE v2
+# AGENTS.md
 
-Heterogeneous distributed LLM inference with ANE compute integration and stacked compression.
+These instructions are mandatory for every coding agent working in this repository.
 
-## Project Overview
+## Primary Rule
 
-CROSSFIRE v2 lights up the Apple Neural Engine (ANE) as a compute target inside an
-EXO-orchestrated distributed inference pipeline spanning NVIDIA CUDA and Apple Silicon.
+Before any `git push`, the agent must bring the project trackers up to date:
 
-**Core thesis:** Every Mac in an EXO cluster leaves ~19 TFLOPS of dedicated fp16 ANE
-compute completely dark. CROSSFIRE v2 asks: can we add the ANE as a compute target
-inside an EXO pipeline, and does it improve throughput, latency, or power efficiency?
+- `tasks.md`
+- `status.md`
+- `checkpoint.md`
 
-**Secondary question:** Does stacking TurboQuant+ compression (TQ4_1S weights + turbo3
-KV cache) on top of the EXO + ANE pipeline compound the gains?
+If those files do not reflect the actual repository state, the work is not ready to push.
 
-### Five Compute Targets
+## Tracker Responsibilities
 
-| Target | Hardware | Managed By | Role | Power |
-|--------|----------|------------|------|-------|
-| T1: CUDA GPU | RTX 5090 32GB | EXO (CUDA) | Prefill | ~350W |
-| T2: Metal GPU | M4 Max 40-core | EXO (MLX) | Primary decode | ~40-60W |
-| T3: ANE | M4 Max 16-core ANE | ANEMLL / Rustane | Draft model / speculative decode | ~2-5W |
-| T4: CPU/SME | M4 Max CPU | EXO scheduler | KV cache mgmt, speculative verification | ~10-15W |
-| T5: RDMA | Thunderbolt 5 link | EXO RDMA (IBV) | KV cache streaming (3us latency) | ~2W |
+### `tasks.md`
 
-Primary models: Qwen 3.5 27B (primary), Qwen3.5 0.6B (ANE draft), Qwen 2.5 72B (stretch).
+Maintain `tasks.md` as the atomic source of truth.
 
-## Tech Stack
+Rules:
+- Only mark a task done when the file, code path, test, artifact, or hardware action actually exists and has been verified in the current repo or environment.
+- Do not mark roadmap items done because a plan says they should be done.
+- Use partial status only when code exists but the implementation is still incomplete, placeholder, or blocked on follow-up work.
+- Add new atomic tasks when work appears that is not already represented.
+- Split vague tasks into concrete tasks before marking progress.
 
-- **Distributed orchestration:** EXO 1.0 (RDMA over Thunderbolt 5, topology-aware auto-parallel)
-- **ANE inference:** ANEMLL (CoreML path), Rustane (direct API path)
-- **Weight compression:** TurboQuant+ (TheTom/turboquant_plus fork) — TQ4_1S format
-- **KV cache compression:** llama.cpp turbo3/turbo4 (asymmetric q8_0-K / turbo3-V)
-- **Inference engine:** llama.cpp (TurboQuant+ fork for TQ4_1S), MLX (via EXO)
-- **Benchmarking:** Python 3.10+, psutil, tabulate
-- **Config:** YAML-based model and hardware definitions
-- **Linting:** ruff
-- **Testing:** pytest
+### `status.md`
 
-## Directory Structure
+Maintain `status.md` as the concise executive snapshot.
 
-```
-src/crossfire/           # Core library
-  ane/                   # ANE compute target (ANEMLL/Rustane integration)
-  compression/           # TQ4_1S quantization + KV cache compression
-  distributed/           # EXO orchestration + RDMA networking
-  utils/                 # Metric collection and reporting
-benchmarks/              # Perplexity, throughput, memory, power profiling
-configs/                 # Model and hardware YAML definitions
-scripts/                 # Setup and experiment runner shell scripts
-results/                 # Benchmark outputs (raw/ is gitignored)
-tests/                   # pytest test suite
-```
+Rules:
+- Reflect current repo reality, not aspiration.
+- Call out mismatches between planning docs and code.
+- State what is complete, partial, not started, and blocked.
+- Include current verification status for the latest edit batch.
+- Include the current branch and latest commit when practical.
 
-## Commands
+### `checkpoint.md`
+
+Maintain `checkpoint.md` as the durable session log.
+
+Rules:
+- Add a new top entry for every meaningful work session.
+- Record what was actually changed, not what was intended.
+- Record the ending state, open risks, and whether verification was run.
+- Do not delete prior session history unless it is factually wrong and replaced by a corrected entry.
+
+## Push Gate
+
+Before any `git push`, the agent must complete all of the following:
+
+1. Re-read `tasks.md`, `status.md`, and `checkpoint.md`.
+2. Update them to match the current repo state.
+3. Run the required verification for the current batch.
+4. Reflect the verification result in `status.md` and `checkpoint.md`.
+5. Confirm there is no obvious mismatch between:
+   - tracker files
+   - code on disk
+   - git diff
+
+If any of those are out of sync, do not push yet.
+
+## Verification Rule
+
+For code or config changes, run the project checks that apply to this repository:
 
 ```bash
-# Install (editable, with dev deps)
-pip install -e ".[dev]"
-
-# Run tests
 pytest
-
-# Lint
 ruff check .
 ruff format --check .
-
-# Run a benchmark (placeholder — will be implemented)
-python -m benchmarks.perplexity --model models/qwen3.5-27b-tq4_1s.gguf
 ```
 
-## Code Conventions
+If a command fails:
+- do not claim the work is complete
+- record the failure in `status.md` and `checkpoint.md`
+- either fix it or explicitly leave it as an open blocker
 
-- **Python 3.10+** — use `from __future__ import annotations` in every module
-- **Type hints** on all public function signatures
-- **Dataclasses** (`frozen=True`) for configuration objects
-- **ruff** for linting and formatting (line length 100)
-- **No `any` types** — be explicit
-- **Constants** as module-level `UPPER_SNAKE_CASE`
-- **Errors:** raise specific exceptions with descriptive messages, not bare `Exception`
-- **Shell scripts:** bash, set `-euo pipefail`, quote all variables
+## Completion Standard
 
-## Do's
+A task is only complete when all of the following are true:
+- the implementation exists in the repository
+- any required tests or verification for that work have been run
+- the trackers reflect that state
+- the checkpoint log records the session
 
-- Use `pathlib.Path` for all file path handling
-- Use `subprocess.run(..., check=True)` for external commands
-- Keep benchmark scripts stateless — config in, results out
-- Store processed results in `results/`, raw data in `results/raw/` (gitignored)
-- Use YAML configs for anything that varies between runs
-- Measure power per-target (use `powermetrics` on Mac, `nvidia-smi` on PC)
+## Naming And Scope Discipline
 
-## Don'ts
+This repo currently has a live mismatch between `CROSSFIRE-X` planning docs and `CROSSFIRE v2` code/public docs.
 
-- Don't commit model files (*.gguf, *.bin, *.safetensors, *.mlmodelc) — they're multi-GB
-- Don't commit spec docs, tasks.md, checkpoint.md — internal only
-- Don't hardcode paths to models or binaries — use configs
-- Don't add dependencies without justification
-- Don't use `os.path` — use `pathlib`
-- Don't use CoreML `compute_units=ALL` — macOS 26.3 routes to GPU, not ANE. Use direct API.
+Rules:
+- call out naming mismatches in `status.md` until they are fixed
+- do not silently mark rename work done while old identifiers remain in code or docs
+- keep hardware tasks blocked until the hardware step was actually executed and recorded
+- keep placeholder implementations marked partial until the real execution path exists
 
-## Hardware Context
+## Agent Behavior
 
-| Node | Hardware | Role | Key Specs |
-|------|----------|------|-----------|
-| PC | RTX 5090 32GB + 64GB DDR5 | Prefill (T1) | ~200 TFLOPS FP16, ~1,792 GB/s |
-| Mac | M4 Max 64GB Unified | Decode (T2) + ANE (T3) | 546 GB/s, 40-core GPU, 16-core ANE (~19 TFLOPS) |
-
-Network: Thunderbolt 5 (80 Gbps bidirectional, RDMA-capable, 3us latency via EXO).
-
-Key config: `sudo sysctl iogpu.wired_limit_mb=58982` on Mac (unlocks ~90% of 64GB for Metal).
-RDMA enable via Recovery mode: `rdma_ctl enable`.
-
-## Known Constraints
-
-- EXO 1.0 demos use DGX Spark (ARM + Blackwell), not standard Linux PC with RTX 5090
-- TQ4_1S requires TheTom/turboquant_plus fork, not mainline llama.cpp
-- ANE has 32 MB SRAM cliff (30% throughput drop beyond it)
-- ANE dimension efficiency cliff at dim=5120 (4.7x penalty — keep <=4096)
-- ANEMLL max model size ~8B, context caps 2048-4096
-- macOS 26.3 routes CoreML `compute_units=ALL` to GPU, not ANE — use direct private API
-- KV cache FP16 ANE -> GGML/MLX bridge costs ~11-16% decode degradation
-- Blackwell tensor cores have structural mismatch with turbo dequant (25-38% penalty)
-- Model files must be downloaded separately (not in repo)
-
-## Experiment Tiers
-
-- **Tier 0 (Day 1-2):** EXO baseline — confirm distributed inference over TB5 RDMA
-- **Tier 1 (Day 3-6):** ANE integration — zero-interference, speculative draft, prefill offload
-- **Tier 2 (Day 7-9):** TurboQuant+ compression stacked on EXO + ANE pipeline
-- **Day 10:** Analysis, charts, write-up
-
-## Key References
-
-- EXO Labs: github.com/exo-explore/exo
-- Orion (Murai Labs): arXiv:2603.06728
-- ANEMLL: github.com/Anemll/Anemll
-- Rustane: github.com/ncdrone/rustane
-- AtomGradient: github.com/AtomGradient/hybrid-ane-mlx-bench
-- TurboQuant+: github.com/TheTom/turboquant_plus
+- Prefer updating the trackers in the same change set as the code change they describe.
+- Do not leave tracker updates for later if a push may happen first.
+- Do not trust earlier tracker claims without rechecking the actual files.
+- If you are unsure whether something is complete, mark it pending or partial and explain why.

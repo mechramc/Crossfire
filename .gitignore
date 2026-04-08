@@ -5,9 +5,6 @@
 # -----------------------------------------------------------------------------
 # Internal working docs (not for public repo)
 # -----------------------------------------------------------------------------
-tasks.md
-checkpoint.md
-status.md
 CROSSFIRE-X_Implementation_Spec.md
 *.docx
 !CROSSFIRE-X_Implementation_Spec.md
