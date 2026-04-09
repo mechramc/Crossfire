@@ -5,11 +5,14 @@ from crossfire.autopilot.autopilot import (
     AutoPilot,
     AutoPilotBaselines,
     AutoPilotConfig,
+    AutoPilotEngine,
     AutoPilotOutcome,
     AutoPilotSelection,
     BanditType,
 )
 from crossfire.autopilot.bandit import ArmStats, ThompsonArmStats, ThompsonBandit, UCB1Bandit
+from crossfire.autopilot.decision_tree import DecisionContext
+from crossfire.autopilot.decision_tree import select_policy as decision_tree_select
 from crossfire.autopilot.logger import DecisionLogger, DecisionRecord
 from crossfire.autopilot.policy import (
     POLICY_REGISTRY,
@@ -29,9 +32,11 @@ __all__ = [
     "AutoPilot",
     "AutoPilotBaselines",
     "AutoPilotConfig",
+    "AutoPilotEngine",
     "AutoPilotOutcome",
     "AutoPilotSelection",
     "BanditType",
+    "DecisionContext",
     "DecisionLogger",
     "DecisionRecord",
     "ExecutionPolicy",
@@ -48,5 +53,6 @@ __all__ = [
     "available_policies",
     "classify_query",
     "compute_reward",
+    "decision_tree_select",
     "get_policy_config",
 ]

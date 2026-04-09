@@ -1,4 +1,18 @@
-"""Top-level AutoPilot orchestration for CROSSFIRE-X."""
+"""Top-level AutoPilot orchestration for CROSSFIRE-X.
+
+Supports two selection engines:
+
+  DECISION_TREE  -- deterministic rule-based selector (unified spec default).
+                   Use for predictable, zero-cold-start policy selection.
+                   See crossfire.autopilot.decision_tree for the implementation.
+
+  UCB1_BANDIT    -- adaptive UCB1 multi-armed bandit per query class.
+                   Learns optimal policy per workload pattern over time.
+
+  THOMPSON_BANDIT -- Thompson sampling alternative to UCB1.
+
+Both bandit modes still log decisions and compute rewards for analysis.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +20,8 @@ from dataclasses import dataclass
 from enum import Enum
 
 from crossfire.autopilot.bandit import ThompsonBandit, UCB1Bandit
+from crossfire.autopilot.decision_tree import DecisionContext
+from crossfire.autopilot.decision_tree import select_policy as dt_select
 from crossfire.autopilot.logger import DecisionLogger, DecisionRecord
 from crossfire.autopilot.policy import (
     POLICY_REGISTRY,
@@ -18,20 +34,50 @@ from crossfire.autopilot.reward import RewardBreakdown, RewardInputs, RewardWeig
 
 
 class BanditType(Enum):
-    """Supported bandit backends for AutoPilot."""
+    """Supported bandit backends for AutoPilot (legacy name; use AutoPilotEngine)."""
 
     UCB1 = "ucb1"
     THOMPSON = "thompson"
+
+
+class AutoPilotEngine(Enum):
+    """AutoPilot selection engine.
+
+    Attributes:
+        DECISION_TREE: Deterministic rule-based tree (unified spec default).
+            No cold-start, no exploration overhead. Predictable policy
+            selection from the first request.
+        UCB1_BANDIT: Adaptive UCB1 multi-armed bandit. Learns the optimal
+            policy per query class over N requests. Requires cold-start.
+        THOMPSON_BANDIT: Thompson sampling alternative to UCB1.
+    """
+
+    DECISION_TREE = "decision_tree"
+    UCB1_BANDIT = "ucb1"
+    THOMPSON_BANDIT = "thompson"
 
 
 @dataclass(frozen=True)
 class AutoPilotConfig:
     """Runtime configuration for AutoPilot orchestration."""
 
-    bandit_type: BanditType = BanditType.UCB1
+    engine: AutoPilotEngine = AutoPilotEngine.DECISION_TREE
     exploration_weight: float = 2.0
     success_threshold: float = 0.5
     seed: int | None = None
+
+    # Backwards-compatible alias -- if set, overrides engine
+    bandit_type: BanditType | None = None
+
+    def resolved_engine(self) -> AutoPilotEngine:
+        """Resolve the effective engine, respecting the legacy bandit_type field."""
+        if self.bandit_type is not None:
+            return (
+                AutoPilotEngine.UCB1_BANDIT
+                if self.bandit_type is BanditType.UCB1
+                else AutoPilotEngine.THOMPSON_BANDIT
+            )
+        return self.engine
 
 
 @dataclass(frozen=True)
@@ -71,7 +117,15 @@ DEFAULT_REWARD_WEIGHTS = RewardWeights()
 
 
 class AutoPilot:
-    """Coordinate query classification, policy choice, reward, and logging."""
+    """Coordinate query classification, policy choice, reward, and logging.
+
+    Supports two selection engines configured via AutoPilotConfig.engine:
+      - DECISION_TREE: deterministic, zero-cold-start (unified spec default)
+      - UCB1_BANDIT / THOMPSON_BANDIT: adaptive, learns per workload
+
+    Both engines produce AutoPilotSelection objects with the same shape,
+    so callers do not need to branch on the engine type.
+    """
 
     def __init__(
         self,
@@ -91,13 +145,61 @@ class AutoPilot:
         self._bandits = {query_class: self._make_bandit() for query_class in QueryClass}
 
     def select_policy(self, features: QueryFeatures) -> AutoPilotSelection:
-        """Select an execution policy for one request."""
+        """Select an execution policy for one request.
+
+        Routes to the decision tree or bandit engine based on config.engine.
+        For the decision tree, DecisionContext is constructed from QueryFeatures.
+        """
 
         query_class = classify_query(features)
         policies = tuple(available_policies(self.hardware))
         if not policies:
             msg = "No execution policies are available for the current hardware"
             raise ValueError(msg)
+
+        engine = self.config.resolved_engine()
+
+        if engine is AutoPilotEngine.DECISION_TREE:
+            return self._select_via_decision_tree(features, query_class, policies)
+
+        return self._select_via_bandit(query_class, policies)
+
+    def _select_via_decision_tree(
+        self,
+        features: QueryFeatures,
+        query_class: QueryClass,
+        policies: tuple[ExecutionPolicy, ...],
+    ) -> AutoPilotSelection:
+        """Select policy using the deterministic decision tree."""
+
+        ctx = DecisionContext(
+            prompt_len=features.prompt_tokens,
+            output_len=features.max_gen_tokens,
+            context_len=features.context_used,
+            model_size_gb=features.model_size_b * 2.0,  # rough Q8_0 GB estimate
+            model_is_moe=features.model_is_moe,
+            decode_is_bottleneck=False,  # heuristic: true for long-gen classes
+        )
+        selected_policy = dt_select(ctx)
+
+        # Clamp to available policies (hardware may not support all)
+        if selected_policy not in policies:
+            selected_policy = policies[0]  # P0 always available as fallback
+
+        return AutoPilotSelection(
+            query_class=query_class,
+            selected_policy=selected_policy,
+            available_policies=policies,
+            was_exploration=False,  # decision tree is deterministic
+            scores={p.name: None for p in policies},
+        )
+
+    def _select_via_bandit(
+        self,
+        query_class: QueryClass,
+        policies: tuple[ExecutionPolicy, ...],
+    ) -> AutoPilotSelection:
+        """Select policy using the UCB1 or Thompson bandit."""
 
         bandit = self._bandits[query_class]
         selected_policy = bandit.select_arm(list(policies))

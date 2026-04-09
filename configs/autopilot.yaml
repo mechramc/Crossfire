@@ -1,0 +1,65 @@
+# AutoPilot configuration for CROSSFIRE-X
+# Controls both the decision-tree engine (default) and the bandit alternatives.
+
+autopilot:
+  # Selection engine:
+  #   decision_tree  — deterministic rule-based (unified spec default)
+  #   ucb1           — adaptive UCB1 bandit (learns per workload, needs cold start)
+  #   thompson       — Thompson sampling alternative to UCB1
+  engine: decision_tree
+
+  # ── Decision tree thresholds ────────────────────────────────────────────────
+  # Tune these after Phase 2 calibration to match your observed workload.
+  decision_tree:
+    short_token_threshold: 512      # below this → P1 (cheap EXO split)
+    long_context_threshold: 8192    # above this → P4 (TriAttention KV)
+    memory_threshold_gb: 32.0       # model size above this → P3 (TQ4_1S)
+    node_memory_gb: 64.0            # Mac Studio unified memory (for P6 MoE routing)
+
+  # ── UCB1/Thompson bandit settings ───────────────────────────────────────────
+  # Only active when engine is "ucb1" or "thompson"
+  bandit:
+    exploration_weight: 2.0         # c parameter for UCB1 (higher = more exploration)
+    cold_start_rounds: 42           # 7 classes × 6 non-MoE policies (forces exploration)
+    persist_interval: 10            # save bandit state every N decisions
+    state_path: results/autopilot_state.json
+    success_threshold: 0.5          # Thompson: reward > threshold → success
+
+# ── Reward weights (used by both engines for logging/analysis) ───────────────
+reward_weights:
+  throughput: 0.4   # tokens per second contribution
+  efficiency: 0.3   # tokens per watt contribution
+  latency: 0.2      # time-to-first-token contribution
+  quality: 0.1      # perplexity delta contribution (quality guard)
+
+# ── Decision logging ────────────────────────────────────────────────────────
+logging:
+  log_path: results/autopilot_decisions.jsonl
+  fields:
+    - timestamp
+    - query_class
+    - selected_policy
+    - was_exploration
+    - tokens_per_second
+    - tokens_per_watt
+    - ttft_ms
+    - acceptance_rate
+    - flash_moe_hit_rate
+    - reward
+    - execution_time_ms
+
+# ── P1 baseline normalization constants ──────────────────────────────────────
+# Set after Phase 1 calibration. These are the reward normalization divisors.
+# Leave null until calibration runs are complete.
+baselines:
+  p1_8k:
+    tokens_per_second: null   # fill from calibration
+    tokens_per_watt: null
+    ttft_ms: null
+
+# ── Success criteria ────────────────────────────────────────────────────────
+success_criteria:
+  throughput_gain: 0.20       # +20% tok/s vs EXO-only baseline
+  efficiency_gain: 0.30       # +30% tok/W vs EXO-only baseline
+  ppl_max_delta: 0.5          # max acceptable perplexity increase
+  impossible_scenario: true   # binary: 72B runs, OR 128K context works

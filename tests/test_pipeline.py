@@ -75,3 +75,32 @@ def test_compute_target_values():
     assert ComputeTarget.T1_CUDA_GPU.value == "cuda_gpu"
     assert ComputeTarget.T3_ANE.value == "ane"
     assert ComputeTarget.T5_RDMA.value == "rdma"
+    assert ComputeTarget.T6_NVME_SSD.value == "nvme_ssd"
+
+
+def test_pipeline_execution_policy_default():
+    config = _make_pipeline()
+    assert config.execution_policy == "P0"
+    assert config.flash_moe_enabled is False
+
+
+def test_pipeline_flash_moe_policy():
+    targets_pc = [
+        ComputeTargetConfig(target=ComputeTarget.T1_CUDA_GPU, role=NodeRole.PREFILL),
+        ComputeTargetConfig(target=ComputeTarget.T5_RDMA, role=NodeRole.PREFILL),
+    ]
+    targets_mac = [
+        ComputeTargetConfig(target=ComputeTarget.T2_METAL_GPU, role=NodeRole.DECODE),
+        ComputeTargetConfig(target=ComputeTarget.T6_NVME_SSD, role=NodeRole.DECODE),
+    ]
+    config = PipelineConfig(
+        nodes=[
+            NodeConfig(name="PC", host="192.168.1.100", port=8080, targets=targets_pc),
+            NodeConfig(name="Mac", host="192.168.1.101", port=8080, targets=targets_mac),
+        ],
+        execution_policy="P6",
+        flash_moe_enabled=True,
+    )
+    config.validate()
+    assert config.execution_policy == "P6"
+    assert config.flash_moe_enabled is True

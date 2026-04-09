@@ -1,5 +1,5 @@
-# Hardware profiles for CROSSFIRE v2 distributed inference
-# Five compute targets: T1 (CUDA), T2 (Metal GPU), T3 (ANE), T4 (CPU/SME), T5 (RDMA)
+# Hardware profiles for CROSSFIRE-X
+# Six compute targets across two machines: T1–T5 (original) + T6 (NVMe SSD for Flash-MoE)
 
 nodes:
   pc:
@@ -7,7 +7,7 @@ nodes:
     host: "192.168.1.100"
     port: 8080
     targets:
-      - target: cuda_gpu
+      - target: cuda_gpu   # T1
         role: prefill
         specs:
           gpu: "RTX 5090"
@@ -18,47 +18,81 @@ nodes:
           power_watts: 350
         exo:
           backend: cuda
+        flash_moe:
+          build_flags: "-DGGML_CUDA=ON -DLLAMA_FLASH_MOE_GPU_BANK=ON"
+          mode: "stock"  # all experts in 32 GB VRAM for 20-specialist pool
 
   mac:
     name: "Mac Studio (M4 Max)"
     host: "192.168.1.101"
     port: 8080
     targets:
-      - target: metal_gpu
+      - target: metal_gpu  # T2
         role: decode
         specs:
           gpu: "M4 Max (40-core)"
           unified_memory_gb: 64
           bandwidth_gb_s: 546
+          tflops_fp16: 54
           power_watts: 50
         exo:
           backend: mlx
+        flash_moe:
+          build_flags: "-DGGML_METAL=ON -DLLAMA_FLASH_MOE_GPU_BANK=ON"
+          mode: "stock"  # default; switch to slot-bank for pools > 64 GB
 
-      - target: ane
+      - target: ane         # T3
         role: draft
         specs:
           cores: 16
           tflops_fp16: 19
-          sram_mb: 32
+          sram_mb: 32       # 32 MB SRAM cliff — keep activations below this
           power_watts: 3
           max_model_params_b: 8
           max_context: 4096
-        backend: anemll  # or rustane
+          zero_copy_with_gpu: true  # IOSurface shared with Metal GPU
+        backend: anemll      # primary; rustane as alternative
+        constraints:
+          - "macOS 26.3 routes CoreML compute_units=ALL to GPU — use direct private API"
+          - "dim=5120 has 4.7x efficiency penalty — keep hidden_dim ≤ 4096"
+          - "models capped at ~8B parameters; context capped at 2048–4096"
 
-      - target: cpu_sme
+      - target: cpu_sme     # T4
         role: scheduler
         specs:
           cores: 16
           power_watts: 12
+          framework: "Accelerate"
+        roles:
+          - KV cache management
+          - Speculative decode verification
+          - AutoPilot policy model (lightweight)
 
-    # Mac-specific config
+      - target: nvme_ssd    # T6 — Flash-MoE expert streaming
+        role: expert_streaming
+        specs:
+          effective_bandwidth_gb_s: 4.7  # pread() sustained on Mac Studio SSD
+          capacity_tb: 1                  # typical Mac Studio SSD
+          power_watts: 1
+        notes: >
+          T6 is used only by P6 (Flash-MoE slot-bank). When the slot-bank
+          hot-expert cache misses, expert weights are loaded from NVMe via
+          pread() in anemll-flash-llama.cpp. With temporal prefetch enabled,
+          hit rate approaches 100% after warmup — NVMe loads drop to near zero
+          during sustained generation.
+
+    # Mac-specific system config
     metal_config:
       iogpu_wired_limit_mb: 58982  # sudo sysctl iogpu.wired_limit_mb=58982
+      # Unlocks ~90% of 64 GB for Metal. Required before any inference run.
 
 network:
-  interconnect: thunderbolt5_rdma
+  interconnect: thunderbolt5_rdma    # T5
   bandwidth_gbps: 80
   latency_us: 3
   rdma_enabled: true
-  # RDMA enable: Recovery mode -> rdma_ctl enable
-  # Requires: macOS Tahoe 26.2+, genuine TB5 cable (not TB4)
+  # Enable RDMA: Recovery mode → rdma_ctl enable
+  # Requires: macOS Tahoe 26.2+, genuine TB5 cable (not TB4 — different connector)
+  notes: >
+    EXO 1.0 uses IBV-based RDMA over TB5. Reduces KV streaming latency
+    from ~300µs (TCP) to ~3µs. Required for P1–P6 distributed policies.

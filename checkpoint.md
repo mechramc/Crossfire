@@ -5,35 +5,81 @@ Rule: update this file before every `git push`.
 
 ---
 
+## Session 11 - 2026-04-09: Unified spec migration
+
+### What was done
+
+**Spec archival:**
+- Moved `project_crossfire_spec.docx`, `crossfire_v2_spec.docx`, `CROSSFIRE-X_Spec.docx`,
+  `CROSSFIRE_v2.1_Addendum.docx`, `Orion_Forge_v1.1_Addendum.docx`, and
+  `CROSSFIRE-X_Implementation_Spec.md` to `docs/archive/`
+- `crossfire_x_unified.docx` is now the sole canonical spec in the repository root
+
+**New modules added:**
+- `src/crossfire/flashmoe/__init__.py` -- Flash-MoE runtime integration package
+- `src/crossfire/flashmoe/config.py` -- FlashMoEMode enum, SidecarConfig, SlotBankConfig, FlashMoEBuildConfig
+- `src/crossfire/flashmoe/runtime.py` -- FlashMoEStats, FlashMoERuntime interface (stubs pending hardware)
+- `src/crossfire/compression/triattention.py` -- KVCompressionStrategy enum, TriAttentionConfig (stubs)
+- `src/crossfire/autopilot/decision_tree.py` -- deterministic policy selection tree (unified spec Section 9.2)
+- `configs/autopilot.yaml` -- engine config (decision_tree default), bandit settings, reward weights
+
+**Existing modules updated:**
+- `src/crossfire/autopilot/policy.py` -- P6 policy added; flash_moe_available in HardwareAvailability;
+  uses_flash_moe / requires_flash_moe in PolicyConfig
+- `src/crossfire/autopilot/query_classifier.py` -- model_is_moe field added to QueryFeatures
+- `src/crossfire/autopilot/autopilot.py` -- AutoPilotEngine enum; configurable decision tree + bandit paths;
+  AutoPilotConfig.resolved_engine() for backwards compatibility
+- `src/crossfire/distributed/pipeline.py` -- T6_NVME_SSD added to ComputeTarget; execution_policy and
+  flash_moe_enabled added to PipelineConfig; all six targets documented
+- `src/crossfire/utils/metrics.py` -- execution_policy as primary field (replaces ablation_config as
+  primary); prefill_tok/s, ttft_ms, tok/W, acceptance_rate, flash_moe_hit_rate, flash_moe_active added;
+  14-column TABLE_HEADERS
+- `configs/models.yaml` -- qwen3.5-35b-a3b MoE model added with flash_moe_config; ablation matrix
+  expanded from C0-C6 to C0-C7 with new dimensions (llama_runtime, triattention)
+- `configs/hardware.yaml` -- T6 NVMe SSD target added to mac node; Flash-MoE build flags added
+- `tests/test_pipeline.py` -- T6 enum value, execution_policy default, P6 flash_moe_enabled tests
+- `tests/test_metrics.py` -- policy-label format, P6/flash_moe fields, 14-column table
+
+**Documentation updated:**
+- `README.md` -- full rewrite: 6 targets, 7 policies P0-P6, Flash-MoE, TriAttention, C0-C7, Orion Forge
+- `CLAUDE.md` -- T6, P6, Flash-MoE, TriAttention, Orion Forge added to tech stack / constraints / tiers
+- `status.md` -- reflects all Session 11 changes
+- `tasks.md` -- complete overhaul: unified spec phases, new Flash-MoE / TriAttention / Orion Forge tasks
+
+**Lint fixes:**
+- Unicode characters (en-dash, em-dash, multiplication sign, micro sign) in docstrings/comments
+  replaced with ASCII equivalents to satisfy ruff RUF002/RUF003
+- Display placeholder em-dash strings in to_row() (u"\u2014") preserved correctly
+- 3us latency string preserved after aggressive script fixed
+
+### Verification
+- `pytest`: 25 passed
+- `ruff check .`: clean
+- `ruff format --check .`: clean
+
+### State at end of session
+- Unified spec migration complete
+- 6 compute targets, 7 policies, Flash-MoE, TriAttention, Orion Forge all scaffolded in code
+- Hardware bring-up has not started; all T6/P6/Flash-MoE execution paths are stubs
+- Immediate next work: unit tests for new modules, autopilot.yaml config wiring, build_flash_moe.sh
+
+---
+
 ## Session 10 - 2026-04-08: AutoPilot orchestrator completed
 
 ### What was done
 - Completed `T-0508`
 - Added `src/crossfire/autopilot/autopilot.py`
-- Implemented `AutoPilot` with:
-  - per-query-class bandit instances
-  - query classification via `classify_query()`
-  - hardware-aware policy filtering
-  - UCB1 or Thompson backend selection
-  - reward computation and bandit updates
-  - optional JSONL decision logging
-  - serializable policy-stat reporting
-- Added supporting orchestration dataclasses and enums:
-  - `BanditType`
-  - `AutoPilotConfig`
-  - `AutoPilotSelection`
-  - `AutoPilotOutcome`
-  - `AutoPilotBaselines`
+- Implemented `AutoPilot` with per-query-class bandit instances, query classification,
+  hardware-aware policy filtering, UCB1 or Thompson backend selection, reward computation,
+  bandit updates, optional JSONL decision logging, and serializable policy-stat reporting
+- Added supporting types: `BanditType`, `AutoPilotConfig`, `AutoPilotSelection`,
+  `AutoPilotOutcome`, `AutoPilotBaselines`
 - Exported the new orchestrator types from `src/crossfire/autopilot/__init__.py`
-- Updated `tasks.md` and `status.md` to reflect the new orchestration state
 
-### Verification approach
-- Ran an end-to-end smoke check for classify -> select policy -> record outcome -> decision log write
-- Re-ran repo-wide `pytest`, `ruff check .`, and `ruff format --check .`
-
-### State at end of session
-- `T-0508` is complete and verified
-- The next major work is schema migration in `pipeline.py` and `metrics.py`, followed by dedicated AutoPilot unit tests and config wiring
+### Verification
+- End-to-end smoke check: classify -> select policy -> record outcome -> decision log write
+- `pytest`: passed, `ruff check .`: clean, `ruff format --check .`: clean
 
 ---
 
@@ -42,146 +88,79 @@ Rule: update this file before every `git push`.
 ### What was done
 - Completed `T-0501` through `T-0507`
 - Created `src/crossfire/autopilot/__init__.py`
-- Added `query_classifier.py` with `QueryClass`, `QueryFeatures`, and `classify_query()`
-- Added `policy.py` with `ExecutionPolicy`, `PolicyConfig`, `HardwareAvailability`, and policy availability filtering
-- Added `bandit.py` with `ArmStats`, `UCB1Bandit`, `ThompsonArmStats`, and `ThompsonBandit`
-- Added `reward.py` with reward weights, inputs, breakdown, and normalized reward computation
-- Added `logger.py` with `DecisionRecord` and append-only JSONL logging
-- Exported all new AutoPilot primitives from the package root
-- Updated `tasks.md` and `status.md` to reflect the new AutoPilot baseline
+- Added `query_classifier.py`, `policy.py` (P0-P5), `bandit.py` (UCB1 + Thompson),
+  `reward.py`, `logger.py`
 
-### Verification approach
-- Ran a verification gate after each task before proceeding to the next one
-- Used targeted smoke checks for imports, classification, policy filtering, bandit updates, reward math, and JSONL logging
-- Re-ran repo-wide `pytest`, `ruff check .`, and `ruff format --check .` after each completed task
-
-### State at end of session
-- Initial AutoPilot primitives are now present and verified
-- The next AutoPilot step is `T-0508`: implement the orchestrator that composes classifier, bandits, policies, rewards, and logging
-- Pipeline/metrics schemas and dedicated AutoPilot tests remain pending
+### Verification
+- Targeted smoke checks after each task
+- `pytest`: passed, `ruff check .`: clean, `ruff format --check .`: clean
 
 ---
 
 ## Session 8 - 2026-04-07: Phase 1 rename/release alignment completed
 
 ### What was done
-- Completed `T-0102` through `T-0107`
-- Renamed public `README.md` references from `CROSSFIRE v2` to `CROSSFIRE-X`
-- Updated the README results table from ablation config labels to `P0`, `P1`, `P2`, and `P5` policy labels
-- Bumped package version from `0.1.0` to `0.2.0`
-- Updated package metadata description to reflect the self-optimizing / AutoPilot direction
-- Rewrote remaining source docstrings carrying `CROSSFIRE v2` wording
-- Updated `src/crossfire/__init__.py` docstring and version to match the release plan
-- Created a local `.venv` and installed dev dependencies there to complete verification
-- Updated `tasks.md` and `status.md` to reflect the completed Phase 1 state
+- Completed T-0102 through T-0107
+- Renamed public README from `CROSSFIRE v2` to `CROSSFIRE-X`
+- Updated README results table from ablation config labels to P0-P5 policy labels
+- Bumped package version from 0.1.0 to 0.2.0
+- Updated package metadata description, source docstrings, `src/crossfire/__init__.py`
 
-### State at end of session
-- Phase 1 rename/release alignment is complete
-- Verification completed in `.venv`: `pytest` (`21 passed`), `ruff check .`, and `ruff format --check .`
-- Next work shifts to Phase 5 AutoPilot/policy implementation and schema refactoring
+### Verification
+- `pytest` (21 passed), `ruff check .`, `ruff format --check .` all clean in `.venv`
 
 ---
 
 ## Session 7 - 2026-04-07: Tracker reconciliation and push-gate rules
 
 ### What was done
-- Re-audited the repository contents instead of trusting the existing tracker files
-- Rebuilt `tasks.md` as an atomic ledger grounded in what actually exists on disk
-- Marked scaffolded modules, configs, scripts, and existing tests as done only where the files and implementations are present
-- Left hardware, calibration, AutoPilot, dashboard, and public rename work pending because the repo does not yet contain those deliverables
-- Rewrote `status.md` to describe the actual repo state: scaffolded but not yet experimentally runnable
-- Rewrote `AGENTS.md` so every future agent must update `tasks.md`, `status.md`, and `checkpoint.md` before any `git push`
-
-### State at end of session
-- Tracking docs are now aligned with the current repository state
-- Key mismatch remains: planning docs say `CROSSFIRE-X`, while public/package/source identifiers still contain `CROSSFIRE v2`
-- Verification completed: `pytest`, `ruff check .`, and `ruff format --check .` all passed; cache-write warnings were non-fatal
+- Re-audited repo contents; rebuilt `tasks.md` as atomic ledger grounded in disk state
+- Rewrote `status.md` to describe actual repo state: scaffolded but not experimentally runnable
+- Rewrote `AGENTS.md` with push-gate tracker rules
 
 ---
 
 ## Session 6 - 2026-04-07: Phase 1 batch 1
 
 ### What was done
-- Completed `TASK-101`
-  - Renamed `CLAUDE.md` from `CROSSFIRE v2` references to `CROSSFIRE-X`
-- Updated trackers to reflect the first completed Phase 1 task
-- Corrected tracker state to acknowledge the current local workspace changes
-
-### State at end of session
-- `TASK-101` is complete
-- `TASK-102` to `TASK-104` remain pending
-- Verification pending for this batch
+- Completed T-0101: renamed `CLAUDE.md` from `CROSSFIRE v2` references to `CROSSFIRE-X`
 
 ---
 
 ## Session 5 - 2026-04-07: CROSSFIRE-X spec + tasks rewrite
 
 ### What was done
-- Reviewed the new `CROSSFIRE-X` spec replacing the earlier v2 plan
-- Wrote `CROSSFIRE-X_Implementation_Spec.md`
-- Reworked the project plan around `P0-P5` execution policies, AutoPilot, dashboard work, and impossible-scenario experiments
-- Updated the earlier tracker files to match that plan
-
-### State at end of session
-- Strategy docs were updated
-- Repo implementation still depended on follow-on code work
-- Tests and lint had last been reported clean at that point
+- Reviewed CROSSFIRE-X spec; wrote `CROSSFIRE-X_Implementation_Spec.md`
+- Reworked project plan around P0-P5, AutoPilot, dashboard, and impossible-scenario experiments
 
 ---
 
-## Session 4 - 2026-04-07: speculative harness prep
+## Session 4 - 2026-04-07: Speculative harness prep
 
 ### What was done
 - Added `src/crossfire/ane/speculative.py`
-- Implemented a bounded speculative decoding step:
-  - draft model proposes tokens
-  - verifier returns authoritative tokens
-  - accepted prefix and rejection path are computed
+- Implemented bounded speculative decoding step (draft proposes, verifier accepts/rejects)
 - Added focused tests for accept, reject, and empty-result paths
-
-### State at end of session
-- Speculative harness logic existed in repo
-- Hardware-gated speculative experiments remained pending
-- Verification was still pending for that session's tracker entry
 
 ---
 
-## Session 3 - 2026-04-07: first tracker pass
+## Session 3 - 2026-04-07: First tracker pass
 
 ### What was done
-- Created the earlier versions of `tasks.md`, `status.md`, and `checkpoint.md`
-- Captured the then-current v2-oriented roadmap and repository status
-
-### State at end of session
-- Tracking infrastructure existed
-- Later sessions superseded portions of that tracker content
+- Created initial versions of `tasks.md`, `status.md`, `checkpoint.md`
 
 ---
 
 ## Session 2 - 2026-04-07: v2 spec alignment
 
 ### What was done
-- Updated docs and code toward the v2 EXO + ANE architecture
-- Added ANE module scaffolds
-- Updated distributed pipeline/network scaffolds
-- Updated configs and scripts for EXO, ANEMLL, Rustane, and RDMA assumptions
-- Added and updated tests around the new scaffolds
-
-### State at end of session
-- Repo had moved to the EXO/ANE architecture direction
-- Public naming still reflected `CROSSFIRE v2`
+- Updated docs and code toward EXO + ANE architecture
+- Added ANE module scaffolds, distributed pipeline/network scaffolds
+- Updated configs and scripts for EXO, ANEMLL, Rustane, RDMA
 
 ---
 
-## Session 1 - 2026-04-06: project initialization
-
-### What was done
-- Created the initial repository scaffold
-- Added package metadata, baseline docs, configs, scripts, tests, and ignore rules
-- Fixed packaging and ruff issues in the initial setup
+## Session 1 - 2026-04-06: Project initialization
 
 ### Committed as
-- `4611d21` - `Initialize project structure with scaffolded source, benchmarks, and configs`
-
-### State at end of session
-- Initial scaffold was committed and pushed
+- `4611d21` -- `Initialize project structure with scaffolded source, benchmarks, and configs`

@@ -20,7 +20,11 @@ class QueryClass(Enum):
 
 @dataclass(frozen=True)
 class QueryFeatures:
-    """Request features used for execution-policy classification."""
+    """Request features used for execution-policy classification.
+
+    Used by the bandit-based AutoPilot engine. For the decision-tree
+    engine, see crossfire.autopilot.decision_tree.DecisionContext.
+    """
 
     prompt_tokens: int
     max_gen_tokens: int
@@ -28,6 +32,7 @@ class QueryFeatures:
     model_size_b: float
     available_vram_mb: float
     concurrent_requests: int
+    model_is_moe: bool = False  # True for MoE models (Qwen3.5-35B-A3B, Orion Forge)
 
     def __post_init__(self) -> None:
         """Validate feature values are physically meaningful."""

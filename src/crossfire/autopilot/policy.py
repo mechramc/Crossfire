@@ -7,7 +7,11 @@ from enum import Enum
 
 
 class ExecutionPolicy(Enum):
-    """Execution policies available to AutoPilot."""
+    """Execution policies available to AutoPilot.
+
+    P0-P5 operate on dense models. P6 is the Flash-MoE slot-bank policy
+    for MoE models (Qwen3.5-35B-A3B, Orion Forge) that exceed node memory.
+    """
 
     P0 = "p0"
     P1 = "p1"
@@ -15,6 +19,7 @@ class ExecutionPolicy(Enum):
     P3 = "p3"
     P4 = "p4"
     P5 = "p5"
+    P6 = "p6"
 
 
 @dataclass(frozen=True)
@@ -25,6 +30,7 @@ class HardwareAvailability:
     ane_available: bool = False
     tq4_1s_available: bool = False
     turbo_kv_available: bool = False
+    flash_moe_available: bool = False  # anemll-flash-llama.cpp built and verified
 
 
 @dataclass(frozen=True)
@@ -37,10 +43,12 @@ class PolicyConfig:
     uses_ane: bool
     uses_tq4_1s: bool
     uses_turbo_kv: bool
+    uses_flash_moe: bool = False
     requires_rdma: bool = False
     requires_ane: bool = False
     requires_tq4_1s: bool = False
     requires_turbo_kv: bool = False
+    requires_flash_moe: bool = False
 
     def is_available(self, hardware: HardwareAvailability) -> bool:
         """Return whether the policy is runnable with the current hardware."""
@@ -51,7 +59,9 @@ class PolicyConfig:
             return False
         if self.requires_tq4_1s and not hardware.tq4_1s_available:
             return False
-        return not (self.requires_turbo_kv and not hardware.turbo_kv_available)
+        if self.requires_turbo_kv and not hardware.turbo_kv_available:
+            return False
+        return not (self.requires_flash_moe and not hardware.flash_moe_available)
 
 
 POLICY_REGISTRY: dict[ExecutionPolicy, PolicyConfig] = {
@@ -114,6 +124,20 @@ POLICY_REGISTRY: dict[ExecutionPolicy, PolicyConfig] = {
         requires_ane=True,
         requires_tq4_1s=True,
         requires_turbo_kv=True,
+    ),
+    ExecutionPolicy.P6: PolicyConfig(
+        policy=ExecutionPolicy.P6,
+        description=(
+            "Flash-MoE slot-bank + EXO for MoE models exceeding node memory; "
+            "experts streamed from NVMe SSD (T6)"
+        ),
+        distributed=True,
+        uses_ane=False,
+        uses_tq4_1s=False,
+        uses_turbo_kv=False,
+        uses_flash_moe=True,
+        requires_rdma=True,
+        requires_flash_moe=True,
     ),
 }
 
