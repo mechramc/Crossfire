@@ -6,10 +6,10 @@
 
 CROSSFIRE-X integrates the Apple Neural Engine (ANE) as a compute target inside an
 [EXO](https://github.com/exo-explore/exo)-orchestrated distributed inference pipeline
-spanning NVIDIA CUDA and Apple Silicon — with Flash-MoE slot-bank streaming, TriAttention
+spanning NVIDIA CUDA and Apple Silicon, with Flash-MoE slot-bank streaming, TriAttention
 KV compression, and TurboQuant+ weight compression stacked on top.
 
-### Six Compute Targets, One Pipeline
+### Five Compute Targets, One Pipeline
 
 | Target | Hardware | Role | Power |
 |--------|----------|------|-------|
@@ -17,26 +17,38 @@ KV compression, and TurboQuant+ weight compression stacked on top.
 | T2: Metal GPU | M4 Max 40-core | Primary decode | ~40-60W |
 | T3: ANE | M4 Max 16-core ANE | Draft model (speculative decode) | ~2-5W |
 | T4: CPU/SME | M4 Max CPU | KV cache mgmt, speculative verification | ~10-15W |
-| T5: RDMA | Thunderbolt 5 | KV cache streaming (3us latency) | ~2W |
-| T6: NVMe SSD | Mac internal SSD | Flash-MoE expert streaming (P6) | ~5W |
+| T5: NVMe SSD | Mac internal SSD | Flash-MoE expert streaming (P6) | ~5W |
 
 **Core thesis:** Every Mac in an EXO cluster leaves ~19 TFLOPS of ANE compute dark, and MoE
 models that exceed node memory are completely unservable without expert streaming. CROSSFIRE-X
-lights up both — and measures whether the combination yields better throughput, latency, and
-power efficiency than any single technique alone.
+lights up both, then uses composed compression to make a USB4 interconnect viable enough that
+cable speed stops being the limiting story.
 
-**Secondary question:** Does stacking TriAttention KV compression + TQ4_1S weight compression
-on top of the EXO + ANE pipeline compound the gains? And can Flash-MoE slot-bank streaming
-make Orion Forge (fused specialist MoE) servable at real-time inference speeds?
+**Secondary questions:**
+- Does composing TriAttention + TurboQuant reduce cross-node KV transfer enough to make USB4
+  effectively invisible for practical inference?
+- Can Flash-MoE slot-bank streaming make Orion Forge (fused specialist MoE) servable at
+  real-time inference speeds?
+
+### Interconnect
+
+| Link | Speed | Latency | Role |
+|------|-------|---------|------|
+| USB4 active cable | 40 Gbps (~4-5 GB/s effective) | ~300 us | Primary EXO data path |
+| 5GbE Ethernet | 5 Gbps | ~500 us | Discovery, control plane, fallback |
+
+The final build spec assumes USB4 with Thunderbolt IP bridging, not TB5 RDMA. The practical
+claim is that composed compression makes the slower, more common consumer interconnect good
+enough for the target workload.
 
 ## Hardware Requirements
 
 | Node | Hardware | Role |
 |------|----------|------|
 | PC | NVIDIA RTX 5090 (32GB) + 64GB DDR5 | EXO compute node: prefill (T1) |
-| Mac | Apple M4 Max (64GB Unified) + NVMe | EXO compute node: decode (T2) + ANE (T3) + expert streaming (T6) |
+| Mac | Apple M4 Max (64GB Unified) + NVMe | EXO compute node: decode (T2) + ANE (T3) + expert streaming (T5) |
 
-**Network:** Thunderbolt 5 (80 Gbps bidirectional, RDMA-capable, 3us latency).
+**Network:** USB4 active cable as the primary EXO path, with 5GbE as the fallback and control link.
 
 ## Models
 
@@ -56,21 +68,21 @@ AutoPilot selects the appropriate policy at runtime using a deterministic decisi
 | Policy | Pipeline | ANE | KV Strategy | Weights | Use Case |
 |--------|----------|-----|-------------|---------|----------|
 | P0 | Single best node | Idle | None | FP16/Q8 | Fallback, no distributed overhead |
-| P1 | EXO (5090 prefill + Mac decode) | Idle | None | FP16/Q8 | Distributed baseline |
-| P2 | EXO | Draft 0.6B | None | FP16/Q8 | Speculative decode via ANE |
-| P3 | EXO | Idle | None | TQ4_1S | Compressed weights |
-| P4 | EXO | Idle | TriAttention | TQ4_1S | Long-context, max KV compression |
-| P5 | EXO | Draft 0.6B | TriAttention | TQ4_1S | Full-stack stacked compression |
-| P6 | EXO | Idle | TriAttention | Flash-MoE | MoE models exceeding node memory |
+| P1 | EXO over USB4 (5090 prefill + Mac decode) | Idle | None | FP16/Q8 | Distributed baseline |
+| P2 | EXO over USB4 | Draft 0.6B | None | FP16/Q8 | Speculative decode via ANE |
+| P3 | EXO over USB4 | Idle | None | TQ4_1S | Reduce cross-node transfer cost |
+| P4 | EXO over USB4 | Idle | TriAttention | TQ4_1S | Long-context, compressed KV path |
+| P5 | EXO over USB4 | Draft 0.6B | TriAttention | TQ4_1S | Full-stack stacked compression |
+| P6 | EXO over USB4 | Idle | TriAttention | Flash-MoE | MoE models exceeding node memory |
 
 ## Project Structure
 
-```
+```text
 src/crossfire/           # Core library
   ane/                   # ANE compute target (ANEMLL, Rustane integration)
   autopilot/             # AutoPilot policy engine (decision tree + bandits)
   compression/           # TQ4_1S quantization, TriAttention + turbo3 KV compression
-  distributed/           # EXO orchestration, RDMA networking
+  distributed/           # EXO orchestration and cross-node networking
   flashmoe/              # Flash-MoE slot-bank runtime (anemll-flash-llama.cpp)
   utils/                 # Metric collection, power profiling, reporting
 benchmarks/              # Perplexity, throughput, memory, power profiling
@@ -96,10 +108,12 @@ pytest
 
 # Lint
 ruff check .
+ruff format --check .
 ```
 
-> Full hardware setup (EXO + RDMA + Flash-MoE build) documented in `scripts/setup_mac.sh`
-> and `scripts/setup_pc.sh`.
+> The final build spec assumes EXO over USB4 plus a 5GbE fallback. The current setup scripts and
+> code scaffolds still contain older RDMA-oriented naming; see `status.md` for the remaining
+> reconciliation work.
 
 ## Ablation Matrix (C0-C7)
 
@@ -111,7 +125,7 @@ Controlled offline benchmarking configs that isolate each component's contributi
 | C1 | EXO (T1+T2) | stock | off | none | Q8_0 |
 | C2 | EXO | stock | T3 draft | none | Q8_0 |
 | C3 | EXO | stock | off | TriAttention | Q8_0 |
-| C4 | EXO | stock | off | none | TQ4_1S |
+| C4 | EXO | stock | off | TriAttention | TQ4_1S |
 | C5 | EXO | stock | T3 draft | TriAttention | TQ4_1S |
 | C6 | EXO | Flash-MoE slot-bank | off | TriAttention | Flash-MoE |
 | C7 | Single-node | Flash-MoE slot-bank | off | none | Flash-MoE |
@@ -120,11 +134,11 @@ Controlled offline benchmarking configs that isolate each component's contributi
 
 | Tier | Focus |
 |------|-------|
-| Tier 0 (Day 1-2) | EXO baseline -- confirm distributed inference over TB5 RDMA |
-| Tier 1 (Day 3-6) | ANE integration -- zero-interference, speculative draft, prefill offload |
-| Tier 2 (Day 7-9) | TurboQuant+ + TriAttention stacked on EXO + ANE pipeline |
-| Tier 3 (Day 10-12) | Flash-MoE slot-bank bring-up + Orion Forge serving (P6) |
-| Write-up (Day 13-14) | Analysis, charts, blog post, community submissions |
+| Tier 0 (Day 1-2) | EXO baseline over USB4 + Thunderbolt IP bridge |
+| Tier 1 (Day 3-4) | Flash-MoE integration and slot-bank validation |
+| Tier 2 (Day 5-9) | ANE integration + composed TriAttention/TurboQuant compression |
+| Tier 3 (Day 10-12) | AutoPilot routing, USB4-aware policy selection, Orion Forge serving |
+| Write-up (Day 13-15) | Analysis, charts, blog post, community submissions |
 
 ## Results
 
@@ -140,12 +154,12 @@ Controlled offline benchmarking configs that isolate each component's contributi
 
 ## Key Dependencies
 
-- [EXO](https://github.com/exo-explore/exo) -- distributed inference with RDMA over TB5
-- [anemll-flash-llama.cpp](https://github.com/Anemll/anemll-flash-llama.cpp) -- Flash-MoE slot-bank expert streaming (T6)
+- [EXO](https://github.com/exo-explore/exo) -- distributed inference over a consumer interconnect
+- [anemll-flash-llama.cpp](https://github.com/Anemll/anemll-flash-llama.cpp) -- Flash-MoE slot-bank expert streaming (T5)
 - [ANEMLL](https://github.com/Anemll/Anemll) -- ANE inference pipeline (T3)
 - [Rustane](https://github.com/ncdrone/rustane) -- Rust-native ANE training/inference
 - [TurboQuant+](https://github.com/TheTom/turboquant_plus) -- TQ4_1S weight compression
-- [TriAttention](https://arxiv.org/abs/2604.04921) -- Trigonometric pre-RoPE KV scoring (10.7x KV reduction)
+- [TriAttention](https://arxiv.org/abs/2604.04921) -- Trigonometric pre-RoPE KV scoring (10.7x KV reduction; composes to ~6.8x with TurboQuant on the current thesis)
 - [Orion](https://arxiv.org/abs/2603.06728) -- ANE programming system (Murai Labs)
 
 ## License
@@ -156,8 +170,7 @@ Apache 2.0 -- see [LICENSE](LICENSE) for details.
 
 Built on the work of: EXO Labs (Alex Cheema), maderix (Manjeet Singh), ANEMLL team,
 Daniel Isaac (Rustane), AtomGradient, SqueezeBits (Yetter), Tom Turney (TurboQuant+),
-TriAttention authors (arXiv:2604.04921), Jeff Geerling (RDMA benchmarks), and the
-ANE research community.
+TriAttention authors and downstream ports, Jeff Geerling, and the ANE research community.
 
 ## Citation
 

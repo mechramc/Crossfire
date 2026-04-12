@@ -1,6 +1,6 @@
 # CROSSFIRE-X Task Ledger
 
-Last updated: 2026-04-09
+Last updated: 2026-04-11
 Purpose: Atomic project task list grounded in the current repository state.
 Rule: Only mark a task done when the code, file, or artifact exists in this repo or the required hardware action has been executed and recorded.
 
@@ -26,7 +26,7 @@ Rule: Only mark a task done when the code, file, or artifact exists in this repo
 
 ## Phase 1 - Unified Spec Migration (Session 11)
 
-- [x] T-0101 Archive all superseded specs; `crossfire_x_unified.docx` is sole canonical spec
+- [x] T-0101 Archive all superseded specs; `crossfire_x_unified.docx` became the Session 11 canonical spec
 - [x] T-0102 Update `README.md` for unified spec (6 targets, 7 policies, Flash-MoE, TriAttention, C0-C7)
 - [x] T-0103 Update `CLAUDE.md` for unified spec (T6, P6, Flash-MoE, TriAttention, Orion Forge)
 - [x] T-0104 Update `status.md` for unified spec state
@@ -48,6 +48,16 @@ Rule: Only mark a task done when the code, file, or artifact exists in this repo
 - [x] T-0120 Update `configs/hardware.yaml` (T6 NVMe SSD, Flash-MoE build flags)
 - [x] T-0121 Update pipeline tests for T6 and P6
 - [x] T-0122 Update metrics tests for policy-native schema and P6 fields
+
+## Phase 1A - Final Build Spec Reconciliation (Session 12)
+
+- [x] T-0123 Review `crossfire_x_final.docx` against current repo docs and trackers
+- [x] T-0124 Update `README.md` for USB4/TCP-IP interconnect, 5GbE fallback, and composed compression thesis
+- [x] T-0125 Update `CLAUDE.md` for final build spec framing and current implementation mismatch notes
+- [x] T-0126 Update `status.md` and `checkpoint.md` for final build spec state
+- [~] T-0127 Canonicalize spec docs around `crossfire_x_final.docx`; `crossfire_x_unified.docx` still remains in the repo root
+- [ ] T-0128 Reconcile code/config/test naming from RDMA/T5/T6 model to USB4 interconnect + T5 NVMe final spec model
+- [ ] T-0129 Update setup scripts and hardware/config docs from TB5 RDMA prerequisites to USB4/Thunderbolt IP bridge + 5GbE fallback
 
 ## Phase 2 - Core Library Scaffolds
 
@@ -99,37 +109,38 @@ Rule: Only mark a task done when the code, file, or artifact exists in this repo
 - [x] T-0503 `tests/test_metrics.py` (policy schema, P6 fields, 14-column table)
 - [ ] T-0504 `tests/test_flashmoe.py` -- FlashMoEMode, SlotBankConfig, FlashMoEBuildConfig, FlashMoERuntime
 - [ ] T-0505 `tests/test_triattention.py` -- KVCompressionStrategy, TriAttentionConfig
-- [ ] T-0506 `tests/test_decision_tree.py` -- all branches of select_policy()
+- [ ] T-0506 `tests/test_decision_tree.py` -- all branches of `select_policy()`
 - [ ] T-0507 `tests/test_autopilot.py` -- classifier, bandit, reward, logger, orchestrator
-- [ ] T-0508 `tests/test_policy.py` -- P0-P6 availability filtering with HardwareAvailability
+- [ ] T-0508 `tests/test_policy.py` -- P0-P6 availability filtering with `HardwareAvailability`
 
 ## Phase 6 - Hardware Bring-Up And Calibration
 
 - [!] T-0601 Verify PC environment and run `scripts/setup_pc.sh`
 - [!] T-0602 Verify Mac environment and run `scripts/setup_mac.sh`
-- [!] T-0603 Acquire and verify Thunderbolt 5 cable
-- [!] T-0604 Confirm macOS version and RDMA prerequisites on Mac
-- [!] T-0605 Enable RDMA and confirm EXO node discovery
-- [!] T-0606 Download primary 27B model artifacts (Q8_0 + TQ4_1S)
-- [!] T-0607 Download Qwen3.5-0.6B draft model artifacts
-- [!] T-0608 Convert 0.6B draft model into ANE-ready CoreML format
-- [!] T-0609 Build Rustane
-- [!] T-0610 Build anemll-flash-llama.cpp with METAL_FLAGS (Mac) and CUDA_FLAGS (PC)
-- [!] T-0611 Download Qwen3.5-35B-A3B (MoE) and run Flash-MoE sidecar extraction
-- [!] T-0612 Record P0 single-node PC baseline (C0 reference)
-- [!] T-0613 Record P0 single-node Mac baseline (C0 reference)
-- [!] T-0614 Record baseline perplexity runs (wikitext-2-raw-v1, 20 chunks, c=512)
-- [!] T-0615 Record baseline power measurements
-- [!] T-0616 Record distributed P1 baseline at 8K / 16K / 32K (C1)
-- [!] T-0617 Lock reward normalization constants from P1 baseline
-- [!] T-0618 Run ANE zero-interference gate (T3 load with no GPU regression)
-- [!] T-0619 Run P2 ANE speculative calibration (C2)
-- [!] T-0620 Run P3 TriAttention KV calibration (C3)
-- [!] T-0621 Run P4 TQ4_1S compressed calibration (C4)
-- [!] T-0622 Run P5 full-stack calibration (C5)
-- [!] T-0623 Run P6 Flash-MoE slot-bank calibration with 35B-A3B (C6)
-- [!] T-0624 Run P6 Flash-MoE single-node slot-bank calibration (C7)
-- [!] T-0625 Compile C0-C7 ablation matrix artifact under `results/`
+- [!] T-0603 Acquire and verify USB4 40 Gbps active cable
+- [!] T-0604 Configure Thunderbolt IP bridge / TCP-IP networking between nodes
+- [!] T-0605 Measure USB4 throughput between nodes and record baseline
+- [!] T-0606 Validate 5GbE fallback link and discovery path
+- [!] T-0607 Download primary 27B model artifacts (Q8_0 + TQ4_1S)
+- [!] T-0608 Download Qwen3.5-0.6B draft model artifacts
+- [!] T-0609 Convert 0.6B draft model into ANE-ready CoreML format
+- [!] T-0610 Build Rustane
+- [!] T-0611 Build anemll-flash-llama.cpp with Metal flags (Mac) and CUDA flags (PC)
+- [!] T-0612 Download Qwen3.5-35B-A3B (MoE) and run Flash-MoE sidecar extraction
+- [!] T-0613 Record P0 single-node PC baseline (C0 reference)
+- [!] T-0614 Record P0 single-node Mac baseline (C0 reference)
+- [!] T-0615 Record baseline perplexity runs (wikitext-2-raw-v1, 20 chunks, c=512)
+- [!] T-0616 Record baseline power measurements
+- [!] T-0617 Record distributed P1 baseline at 8K / 16K / 32K (C1)
+- [!] T-0618 Lock reward normalization constants from P1 baseline
+- [!] T-0619 Run ANE zero-interference gate (T3 load with no GPU regression)
+- [!] T-0620 Run P2 ANE speculative calibration (C2)
+- [!] T-0621 Run P3 cross-node compression calibration (C3/C4 prework)
+- [!] T-0622 Run P4 TriAttention KV calibration (C4)
+- [!] T-0623 Run P5 full-stack calibration (C5)
+- [!] T-0624 Run P6 Flash-MoE slot-bank calibration with 35B-A3B (C6)
+- [!] T-0625 Run P6 Flash-MoE single-node slot-bank calibration (C7)
+- [!] T-0626 Compile C0-C7 ablation matrix artifact under `results/`
 
 ## Phase 7 - Orion Forge Serving
 
@@ -160,7 +171,8 @@ Rule: Only mark a task done when the code, file, or artifact exists in this repo
 
 ## Immediate Priorities
 
-1. Add unit tests for new modules: test_flashmoe.py, test_triattention.py, test_decision_tree.py (T-0504 to T-0506)
-2. Wire autopilot.yaml config loading into AutoPilot.__init__() (T-0409)
-3. Add scripts/build_flash_moe.sh for anemll-flash-llama.cpp build automation (T-0309)
-4. Hardware bring-up: Tier 0 EXO baseline (T-0601 through T-0617)
+1. Reconcile the implementation layer with the final USB4 build spec: code, configs, scripts, and tests (T-0128, T-0129)
+2. Add unit tests for missing modules: `test_flashmoe.py`, `test_triattention.py`, `test_decision_tree.py` (T-0504 to T-0506)
+3. Wire `configs/autopilot.yaml` loading into `AutoPilot.__init__()` (T-0409)
+4. Add `scripts/build_flash_moe.sh` for anemll-flash-llama.cpp build automation (T-0309)
+5. Hardware bring-up: USB4 baseline and fallback link validation (T-0601 through T-0618)

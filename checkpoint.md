@@ -5,6 +5,46 @@ Rule: update this file before every `git push`.
 
 ---
 
+## Session 12 - 2026-04-11: Final build spec doc and tracker reconciliation
+
+### What was done
+
+**Spec review:**
+- Reviewed `crossfire_x_final.docx` against the repo's current public docs and trackers
+- Identified the major spec delta: the project now assumes USB4 at 40 Gbps over TCP/IP with a
+  5GbE fallback, not TB5 RDMA as the primary interconnect story
+- Identified the new framing change: composed TriAttention + TurboQuant compression is now part of
+  the central thesis because it makes the slower consumer interconnect practical
+
+**Documentation updated:**
+- Rewrote `README.md` to match the final build spec framing:
+  - five compute targets instead of six-target RDMA/T6 public framing
+  - USB4 primary data path and 5GbE fallback
+  - composed compression thesis and revised experiment tiers
+- Rewrote `CLAUDE.md` to match the same framing and to call out that the implementation layer still
+  uses RDMA/T5/T6 naming from the prior scaffold session
+- Reworked `tasks.md` to add Session 12 final-spec reconciliation tasks and to replace hardware
+  bring-up tracker items that assumed TB5 RDMA with USB4 / Thunderbolt IP bridge / 5GbE tasks
+- Rewrote `status.md` to describe the repo's actual state after the doc-only migration
+
+**State documented but not changed in code:**
+- The implementation still models the interconnect as `T5_RDMA` and the SSD as `T6_NVME_SSD`
+- `configs/hardware.yaml`, `scripts/setup_mac.sh`, `scripts/setup_pc.sh`, and several tests still
+  reflect the older TB5/RDMA assumptions
+- `crossfire_x_unified.docx` still remains in the repo root, so spec canonicalization is partial
+
+### Verification
+- `pytest`: 25 passed (with a non-blocking `.pytest_cache` permission warning)
+- `ruff check .`: clean
+- `ruff format --check .`: clean
+
+### State at end of session
+- Public docs and trackers now reflect the final build spec
+- Repo code/config/script/test layers still reflect the earlier unified-spec implementation model
+- Follow-up work is required to reconcile naming, setup flow, and spec canonicalization
+
+---
+
 ## Session 11 - 2026-04-09: Unified spec migration
 
 ### What was done

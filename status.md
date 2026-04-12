@@ -1,79 +1,68 @@
 # CROSSFIRE-X Status
 
-Last updated: 2026-04-09
+Last updated: 2026-04-11
 Branch: main
 Latest commit: 9558acf (`feat: add autopilot primitives and orchestrator`)
-Tracker state: reconciled against repository contents after unified spec migration (Session 11)
+Tracker state: reconciled against repository contents after final build spec review (Session 12)
 
 ## Summary
 
-The repository has been migrated to the unified spec. All spec documents have been
-archived under `docs/archive/`; `crossfire_x_unified.docx` is the sole canonical spec.
-Core library modules now reflect the six compute targets (T1-T6), seven policies (P0-P6),
-Flash-MoE slot-bank runtime, TriAttention KV compression, configurable AutoPilot engine
-(decision tree + bandit), and C0-C7 ablation matrix. The project is not yet in a runnable
-experimental state: benchmark execution paths are stubs and hardware bring-up has not started.
+Repository-facing docs and trackers now reflect `crossfire_x_final.docx` as the current
+reference spec. The public framing has shifted from TB5/RDMA to USB4/TCP-IP with 5GbE
+fallback, and the thesis now treats composed TriAttention + TurboQuant compression as the
+reason the slower consumer interconnect is viable. The implementation layer has not yet been
+migrated to match that framing: code, configs, scripts, and tests still encode the older
+RDMA/T5/T6 model from Session 11.
 
 ## Completed In Repo
 
-### Infrastructure
-- Project scaffold: `src/`, `tests/`, `configs/`, `scripts/`, `benchmarks/`, `results/`
-- `pyproject.toml`, `.gitignore`, `LICENSE`, `CLAUDE.md`, `AGENTS.md`
-- `docs/archive/` created; all superseded specs moved there
+### Documentation And Trackers
+- `README.md` updated for final build spec framing: USB4 primary link, 5GbE fallback,
+  composed compression thesis, and revised tier ordering
+- `CLAUDE.md` updated for final build spec framing and explicit implementation mismatch notes
+- `tasks.md`, `status.md`, and `checkpoint.md` updated for Session 12
+- `crossfire_x_final.docx` reviewed and treated as the current spec reference
 
-### Core Modules
-- ANE module: `draft_model.py`, `power.py`, `speculative.py`
-- Distributed module: `pipeline.py` (T1-T6 targets, execution_policy, flash_moe_enabled), `network.py`
-- Compression module: `turboquant.py`, `kvcache.py`, `triattention.py` (scaffolded stubs)
-- Flash-MoE module: `flashmoe/__init__.py`, `flashmoe/config.py`, `flashmoe/runtime.py`
-- Metrics: `utils/metrics.py` (policy-native schema, 14-column table, P6/Flash-MoE fields)
-
-### AutoPilot
-- `autopilot/query_classifier.py` (QueryClass, QueryFeatures with model_is_moe field)
-- `autopilot/policy.py` (ExecutionPolicy P0-P6, HardwareAvailability with flash_moe_available)
-- `autopilot/bandit.py` (UCB1Bandit, ThompsonBandit)
-- `autopilot/reward.py`
-- `autopilot/logger.py`
-- `autopilot/autopilot.py` (AutoPilotEngine enum, configurable decision tree + bandit paths)
-- `autopilot/decision_tree.py` (deterministic rule tree from unified spec Section 9.2)
-
-### Configs
-- `configs/autopilot.yaml` (decision_tree default, bandit settings, reward weights)
-- `configs/models.yaml` (qwen3.5-35b-a3b MoE added, ablation matrix updated C0-C7)
-- `configs/hardware.yaml` (T6 NVMe SSD added, Flash-MoE build flags)
-
-### Tests
-- `tests/test_ane.py` (11 tests)
-- `tests/test_pipeline.py` (includes T6, execution_policy, flash_moe P6 tests)
-- `tests/test_metrics.py` (includes policy-label, P6/flash_moe fields)
-- All 25 tests pass; ruff lint and format clean
+### Current Scaffolds Still Present
+- Core library modules still scaffold six-target / RDMA-oriented concepts from Session 11
+- AutoPilot, Flash-MoE, TriAttention, and metrics scaffolds remain present as previously built
+- Test suite still passes against the current scaffolded implementation
 
 ## Partially Implemented
 
-- `src/crossfire/compression/turboquant.py`: config exists, execution path is NotImplementedError
-- `src/crossfire/compression/triattention.py`: KVCompressionStrategy enum + config exists, calibrate/apply are NotImplementedError stubs
-- `src/crossfire/flashmoe/runtime.py`: FlashMoERuntime interface defined, run_inference/extract_sidecar are NotImplementedError (pending anemll-flash-llama.cpp bring-up)
-- `benchmarks/perplexity.py`: config and validation exist, execution path is NotImplementedError
-- `benchmarks/throughput.py`: config and validation exist, execution path is NotImplementedError
+- Final spec canonicalization is incomplete: `crossfire_x_unified.docx` still remains in the repo root
+- `src/crossfire/distributed/pipeline.py` still models the interconnect as `T5_RDMA` and SSD as `T6_NVME_SSD`
+- `src/crossfire/distributed/network.py`, `configs/hardware.yaml`, `scripts/setup_mac.sh`,
+  `scripts/setup_pc.sh`, and related tests still describe TB5/RDMA prerequisites
+- `src/crossfire/autopilot/policy.py` still describes the full-stack policy in RDMA-oriented terms
+- Benchmark and hardware plans in code/config artifacts have not yet been rewritten around USB4
 
 ## Not Started
 
-- Tests for new modules: `tests/test_flashmoe.py`, `tests/test_triattention.py`, `tests/test_decision_tree.py`
-- AutoPilot unit tests (classifier, bandit, reward, logger, orchestrator)
-- Dashboard / TUI layer
+- Code/config/test reconciliation to the final USB4 build spec
+- Setup-script migration from RDMA/TB5 bring-up to USB4/Thunderbolt IP bridge + 5GbE fallback
+- Archival/removal of superseded `crossfire_x_unified.docx` from the repo root
 - Hardware bring-up and calibration artifacts under `results/`
 - Flash-MoE binary build (`scripts/build_flash_moe.sh`)
-- TriAttention calibration artifacts (pending paper author collaboration)
+
+## Naming Mismatches
+
+The repo still has a live naming mismatch between the final build spec and the implementation:
+- Final spec: five compute targets plus USB4 interconnect
+- Current code/config/tests: `T5_RDMA` interconnect plus `T6_NVME_SSD`
+
+That mismatch is documented, not resolved. It must remain visible in trackers until the
+implementation layer is migrated.
 
 ## Verification
 
-- `pytest`: 25 passed
+- `pytest`: 25 passed (with a non-blocking `.pytest_cache` permission warning)
 - `ruff check .`: clean
 - `ruff format --check .`: clean
 
 ## Immediate Next Work
 
-1. Add unit tests for new modules (flash_moe, triattention, decision_tree) + AutoPilot components
-2. Wire `configs/autopilot.yaml` loading into `AutoPilot.__init__()`
-3. Add `scripts/build_flash_moe.sh` for anemll-flash-llama.cpp build automation
-4. Hardware bring-up: Tier 0 EXO baseline (T-0601 through T-0614)
+1. Reconcile the implementation layer with the final USB4 build spec: code, configs, scripts, and tests
+2. Archive or relocate `crossfire_x_unified.docx` so `crossfire_x_final.docx` is the only active root spec
+3. Add missing unit tests for Flash-MoE, TriAttention, decision tree, and AutoPilot components
+4. Start hardware bring-up with USB4 baseline and 5GbE fallback measurements

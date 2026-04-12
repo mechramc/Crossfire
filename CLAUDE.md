@@ -10,15 +10,16 @@ with Flash-MoE slot-bank expert streaming for MoE models that exceed node memory
 
 **Core thesis:** Every Mac in an EXO cluster leaves ~19 TFLOPS of dedicated fp16 ANE
 compute completely dark, and MoE models that exceed node memory are completely unservable
-without expert streaming. CROSSFIRE-X lights up both.
+without expert streaming. CROSSFIRE-X lights up both, then uses composed compression to
+make USB4 a viable consumer interconnect instead of treating TB5 RDMA as a prerequisite.
 
 **Secondary questions:**
-- Does stacking TriAttention KV compression (10.7x reduction) + TQ4_1S weight compression
-  on top of EXO + ANE compound the throughput/efficiency gains?
+- Does composing TriAttention + TurboQuant reduce cross-node KV transfer enough to make
+  USB4 effectively invisible for practical inference?
 - Can Flash-MoE slot-bank streaming make Orion Forge (fused specialist MoE) servable at
-  real-time inference speeds on the T6 NVMe target?
+  real-time inference speeds on the NVMe streaming target?
 
-### Six Compute Targets
+### Five Compute Targets
 
 | Target | Hardware | Managed By | Role | Power |
 |--------|----------|------------|------|-------|
@@ -26,20 +27,28 @@ without expert streaming. CROSSFIRE-X lights up both.
 | T2: Metal GPU | M4 Max 40-core | EXO (MLX) | Primary decode | ~40-60W |
 | T3: ANE | M4 Max 16-core ANE | ANEMLL / Rustane | Draft model / speculative decode | ~2-5W |
 | T4: CPU/SME | M4 Max CPU | EXO scheduler | KV cache mgmt, speculative verification | ~10-15W |
-| T5: RDMA | Thunderbolt 5 link | EXO RDMA (IBV) | KV cache streaming (3us latency) | ~2W |
-| T6: NVMe SSD | Mac internal SSD | anemll-flash-llama.cpp | Flash-MoE expert streaming (P6) | ~5W |
+| T5: NVMe SSD | Mac internal SSD | anemll-flash-llama.cpp | Flash-MoE expert streaming (P6) | ~5W |
+
+### Interconnect
+
+| Link | Path | Role |
+|------|------|------|
+| USB4 active cable | Thunderbolt IP bridge / TCP/IP | Primary EXO data path |
+| 5GbE Ethernet | Standard network stack | Discovery, control plane, fallback |
 
 Primary models: Qwen 3.5 27B (dense, primary), Qwen3.5-35B-A3B (MoE, P6 target),
 Qwen3.5 0.6B (ANE draft), Orion Forge (fused specialist MoE), Qwen 2.5 72B (stretch).
 
 ## Tech Stack
 
-- **Distributed orchestration:** EXO 1.0 (RDMA over Thunderbolt 5, topology-aware auto-parallel)
+- **Distributed orchestration:** EXO 1.0 over USB4/TCP-IP, with 5GbE fallback
 - **ANE inference:** ANEMLL (CoreML path), Rustane (direct API path)
 - **Flash-MoE expert streaming:** anemll-flash-llama.cpp (slot-bank runtime, pread from NVMe)
 - **Weight compression:** TurboQuant+ (TheTom/turboquant_plus fork) -- TQ4_1S format
 - **KV cache compression:** TriAttention (arXiv:2604.04921, 10.7x KV reduction, primary strategy)
   and llama.cpp turbo3 (legacy fallback)
+- **Composed compression thesis:** TriAttention + TurboQuant can reduce USB4 transfer cost to the
+  point that the cable becomes operationally irrelevant for the target workload
 - **Inference engine:** anemll-flash-llama.cpp (primary for P6), llama.cpp TurboQuant+ fork (P0-P5)
 - **AutoPilot:** Deterministic decision tree (default) or configurable UCB1/Thompson bandit
 - **Benchmarking:** Python 3.10+, psutil, tabulate
@@ -49,12 +58,12 @@ Qwen3.5 0.6B (ANE draft), Orion Forge (fused specialist MoE), Qwen 2.5 72B (stre
 
 ## Directory Structure
 
-```
+```text
 src/crossfire/           # Core library
   ane/                   # ANE compute target (ANEMLL/Rustane integration)
   autopilot/             # AutoPilot policy engine (decision tree + bandits)
   compression/           # TQ4_1S quantization + TriAttention/turbo3 KV compression
-  distributed/           # EXO orchestration + RDMA networking
+  distributed/           # EXO orchestration + cross-node networking
   flashmoe/              # Flash-MoE slot-bank runtime (anemll-flash-llama.cpp)
   utils/                 # Metric collection and reporting
 benchmarks/              # Perplexity, throughput, memory, power profiling
@@ -105,6 +114,8 @@ python -m benchmarks.perplexity --model models/qwen3.5-27b-tq4_1s.gguf
 - Measure power per-target (use `powermetrics` on Mac, `nvidia-smi` on PC)
 - Gate Flash-MoE paths behind `flash_moe_available` in `HardwareAvailability` --
   P6 must not be selectable until anemll-flash-llama.cpp is built and verified
+- Treat the current RDMA/T5/T6 naming in code as legacy scaffold state until the implementation
+  layer is reconciled with the final USB4 build spec
 
 ## Don'ts
 
@@ -116,45 +127,46 @@ python -m benchmarks.perplexity --model models/qwen3.5-27b-tq4_1s.gguf
 - Don't use CoreML `compute_units=ALL` -- macOS 26.3 routes to GPU, not ANE. Use direct API.
 - Don't use turbo3/turbo4 KV as the primary KV strategy -- TriAttention is the new primary.
   turbo3 remains in `kvcache.py` as a legacy fallback only.
+- Don't claim the final spec migration is complete at the code layer while `src/`, `configs/`,
+  `scripts/`, and tests still encode the older RDMA/T5/T6 model
 
 ## Hardware Context
 
 | Node | Hardware | Role | Key Specs |
 |------|----------|------|-----------|
 | PC | RTX 5090 32GB + 64GB DDR5 | Prefill (T1) | ~200 TFLOPS FP16, ~1,792 GB/s |
-| Mac | M4 Max 64GB Unified + NVMe | Decode (T2) + ANE (T3) + T6 | 546 GB/s, 40-core GPU, 16-core ANE (~19 TFLOPS), ~4.7 GB/s NVMe |
+| Mac | M4 Max 64GB Unified + NVMe | Decode (T2) + ANE (T3) + T5 | 546 GB/s, 40-core GPU, 16-core ANE (~19 TFLOPS), ~4.7 GB/s NVMe |
 
-Network: Thunderbolt 5 (80 Gbps bidirectional, RDMA-capable, 3us latency via EXO).
+Network: USB4 active cable at 40 Gbps via Thunderbolt IP bridge, with 5GbE fallback.
 
 Key config: `sudo sysctl iogpu.wired_limit_mb=58982` on Mac (unlocks ~90% of 64GB for Metal).
-RDMA enable via Recovery mode: `rdma_ctl enable`.
+ASUS BIOS: enable AI Cache Boost for LLM workloads on the 5090 node.
 
 ## Known Constraints
 
-- EXO 1.0 demos use DGX Spark (ARM + Blackwell), not standard Linux PC with RTX 5090
+- EXO over USB4/TCP-IP is less proven than the earlier TB5 RDMA framing
+- The repo implementation still models the interconnect as `T5_RDMA` and the SSD as `T6`; this is
+  a known naming mismatch against the final build spec
 - TQ4_1S requires TheTom/turboquant_plus fork, not mainline llama.cpp
 - ANE has 32 MB SRAM cliff (30% throughput drop beyond it)
 - ANE dimension efficiency cliff at dim=5120 (4.7x penalty -- keep <=4096)
 - ANEMLL max model size ~8B, context caps 2048-4096
 - macOS 26.3 routes CoreML `compute_units=ALL` to GPU, not ANE -- use direct private API
 - KV cache FP16 ANE -> GGML/MLX bridge costs ~11-16% decode degradation
-- Blackwell tensor cores have structural mismatch with turbo dequant (25-38% penalty)
-- Flash-MoE slot-bank requires anemll-flash-llama.cpp built with LLAMA_FLASH_MOE_GPU_BANK=ON;
-  mainline llama.cpp does not support slot-bank mode
-- TriAttention requires calibration artifacts per model; not yet publicly released --
-  implementation stubs are present, paper author collaboration pending
+- Flash-MoE slot-bank requires anemll-flash-llama.cpp built with `LLAMA_FLASH_MOE_GPU_BANK=ON`
+- TriAttention requires calibration artifacts per model; MLX and ggml ports are still early
 - Orion Forge model artifacts require separate acquisition (KALAVAI training pipeline)
 - Model files must be downloaded separately (not in repo)
-- T6 effective bandwidth ~4.7 GB/s (NVMe pread); slot-bank sizing must keep hot experts
-  within 5-15% of node RAM to maintain acceptable hit rate
+- NVMe effective bandwidth is ~4.7 GB/s; slot-bank sizing must keep hot experts within 5-15% of
+  node RAM to maintain acceptable hit rate
 
 ## Experiment Tiers
 
-- **Tier 0 (Day 1-2):** EXO baseline -- confirm distributed inference over TB5 RDMA
-- **Tier 1 (Day 3-6):** ANE integration -- zero-interference, speculative draft, prefill offload
-- **Tier 2 (Day 7-9):** TurboQuant+ + TriAttention compression stacked on EXO + ANE pipeline
-- **Tier 3 (Day 10-12):** Flash-MoE slot-bank bring-up + Orion Forge serving (P6)
-- **Write-up (Day 13-14):** Analysis, charts, blog post, community submissions
+- **Tier 0 (Day 1-2):** EXO baseline over USB4 + Thunderbolt IP bridge
+- **Tier 1 (Day 3-4):** Flash-MoE integration and slot-bank validation
+- **Tier 2 (Day 5-9):** ANE integration + composed TriAttention/TurboQuant compression
+- **Tier 3 (Day 10-12):** AutoPilot routing, USB4-aware policy selection, Orion Forge serving
+- **Write-up (Day 13-15):** Analysis, charts, blog post, community submissions
 
 ## Key References
 
