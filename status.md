@@ -2,65 +2,71 @@
 
 Last updated: 2026-04-21
 Branch: main
-Latest commit: d3c78c2 (`refactor: complete USB4/TCP-IP migration across configs, autopilot, metrics, setup (T-0128 P2)`)
-Tracker state: implementation layer reconciled with `crossfire_x_final.docx` (T-0128, T-0129 closed)
+Latest commit: 89541ce (`fix(scripts): install EXO from source via uv with explicit CUDA extra`)
+Tracker state: all software-layer tasks closed; repo ready for Phase 6 hardware bring-up.
 
 ## Summary
 
-Repository docs, code, configs, scripts, and tests are now aligned with
-`crossfire_x_final.docx`. The public framing (USB4/TCP-IP primary, 5GbE fallback,
-composed TriAttention + TurboQuant compression thesis) is also the model used in
-`ComputeTarget`, `ExecutionPolicy`, `HardwareAvailability`, `BenchmarkResult`,
-`configs/hardware.yaml`, and the setup scripts. There is no remaining `T5_RDMA`
-or `T6_NVME_SSD` naming in code, configs, scripts, or tests.
+Repository docs, code, configs, scripts, and tests are aligned with
+`crossfire_x_final.docx`. The AutoPilot orchestrator now loads from
+`configs/autopilot.yaml`, routes selections into `PipelineConfig`, and feeds
+outcomes back into the reward + bandit layer. The anemll-flash-llama.cpp
+build is automated by `scripts/build_flash_moe.sh`. The only `.docx` spec in
+the repo root is `crossfire_x_final.docx`; the prior unified spec is archived.
 
 ## Completed In Repo
 
 ### Documentation And Trackers
 - `README.md`, `CLAUDE.md`, `tasks.md`, `status.md`, `checkpoint.md` reflect final build spec
-- `crossfire_x_final.docx` is the active spec reference
+- `crossfire_x_final.docx` is the active spec reference; `crossfire_x_unified.docx`
+  now lives under `docs/archive/`
 
-### Implementation Layer (Session 13 migration)
+### Implementation Layer
 - `src/crossfire/distributed/pipeline.py` -- ComputeTarget uses T1-T5 (T5 is NVMe SSD)
 - `src/crossfire/distributed/network.py` -- InterconnectType is USB4/5GbE/WiFi; no RDMA path
 - `src/crossfire/autopilot/policy.py` -- `distributed_available` / `requires_distributed`;
   P4 is TriAttention-only; P0-P6 descriptions match final spec Section 9
+- `src/crossfire/autopilot/decision_tree.py` -- `DecisionTreeThresholds` dataclass with
+  tunable thresholds; `select_policy` accepts overrides from YAML
+- `src/crossfire/autopilot/config_loader.py` -- `load_autopilot_yaml` and
+  `build_autopilot_from_yaml` parse `configs/autopilot.yaml` into a wired AutoPilot
+- `src/crossfire/autopilot/pipeline_integration.py` -- `apply_selection_to_pipeline`,
+  `policy_requires_flash_moe`, and `run_autopilot_cycle` bridge AutoPilot and PipelineConfig
 - `src/crossfire/utils/metrics.py` -- `interconnect` label + `interconnect_bytes` counter
-  replace the legacy `rdma_active` boolean
 - `configs/hardware.yaml` -- `interconnect` block (usb4 / 5gbe / wifi)
 - `scripts/setup_mac.sh`, `scripts/setup_pc.sh` -- Thunderbolt IP bridge guidance,
-  iperf3 probe, nc reachability check; RDMA enablement steps removed
-- `tests/test_metrics.py`, `tests/test_pipeline.py` -- updated fixtures and round-trip
-  coverage for the new interconnect fields
+  iperf3 probe, nc reachability check; EXO installed from source via uv
+- `scripts/build_flash_moe.sh` -- cross-platform anemll-flash-llama.cpp build automation
 
-## Partially Implemented
-
-- Spec canonicalization: `crossfire_x_unified.docx` still remains in the repo root (T-0127)
-- AutoPilot orchestrator is scaffolded but not yet wired to load `configs/autopilot.yaml`
-  or to drive pipeline execution (T-0409, T-0410, T-0411)
+### Tests
+- `tests/test_ane.py`, `tests/test_pipeline.py`, `tests/test_metrics.py`
+- `tests/test_flashmoe.py`, `tests/test_triattention.py`, `tests/test_decision_tree.py`
+- `tests/test_autopilot.py` -- classifier, bandit, reward, logger, orchestrator, YAML loader,
+  pipeline integration (select → apply → record cycle)
+- `tests/test_policy.py` -- P0-P6 availability filtering across every HardwareAvailability combo
 
 ## Not Started
 
-- Unit tests for Flash-MoE, TriAttention, decision tree, and AutoPilot components
-  (T-0504 through T-0508)
-- `scripts/build_flash_moe.sh` for anemll-flash-llama.cpp build automation (T-0309)
-- Hardware bring-up: USB4 cable procurement, Thunderbolt IP bridge configuration,
-  iperf3 baselines, model downloads, ANE model conversion (T-0601 through T-0612)
+- Hardware bring-up: USB4 cable, Thunderbolt IP bridge, iperf3 baselines,
+  model downloads, ANE model conversion (T-0601 through T-0612)
 - Calibration runs for every policy (T-0613 through T-0626)
 - Orion Forge serving (Phase 7)
 - Textual dashboard and final evaluation deliverables (Phase 8)
+- Software follow-ups that are not on the critical path: persist bandit state (T-0412),
+  warm-start from calibration data (T-0413), end-to-end AutoPilot integration test (T-0414)
 
 ## Verification
 
-- `pytest`: 29 passed
+- `pytest`: 129 passed
 - `ruff check .`: clean
 - `ruff format --check .`: clean
 
 ## Immediate Next Work
 
-1. Add unit tests for the remaining scaffolded modules: `test_flashmoe.py`,
-   `test_triattention.py`, `test_decision_tree.py`
-2. Wire `configs/autopilot.yaml` loading into `AutoPilot.__init__()`
-3. Add `scripts/build_flash_moe.sh` for anemll-flash-llama.cpp automation
-4. Archive `crossfire_x_unified.docx` so `crossfire_x_final.docx` is the only root spec
-5. Begin hardware bring-up with USB4 baseline and 5GbE fallback measurements
+Phase 6 (Hardware Bring-Up And Calibration):
+1. Verify PC and Mac environments; run `scripts/setup_pc.sh` and `scripts/setup_mac.sh`
+2. Acquire USB4 40 Gbps active cable; configure Thunderbolt IP bridge between nodes
+3. Record USB4 iperf3 baseline; validate 5GbE fallback
+4. Download 27B / 0.6B / 35B-A3B models; convert 0.6B draft to ANE CoreML
+5. Build Rustane and anemll-flash-llama.cpp; extract MoE sidecar
+6. Record P0/P1 baselines; lock reward normalization constants

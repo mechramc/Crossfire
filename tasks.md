@@ -1,6 +1,6 @@
 # CROSSFIRE-X Task Ledger
 
-Last updated: 2026-04-11
+Last updated: 2026-04-21
 Purpose: Atomic project task list grounded in the current repository state.
 Rule: Only mark a task done when the code, file, or artifact exists in this repo or the required hardware action has been executed and recorded.
 
@@ -55,7 +55,7 @@ Rule: Only mark a task done when the code, file, or artifact exists in this repo
 - [x] T-0124 Update `README.md` for USB4/TCP-IP interconnect, 5GbE fallback, and composed compression thesis
 - [x] T-0125 Update `CLAUDE.md` for final build spec framing and current implementation mismatch notes
 - [x] T-0126 Update `status.md` and `checkpoint.md` for final build spec state
-- [~] T-0127 Canonicalize spec docs around `crossfire_x_final.docx`; `crossfire_x_unified.docx` still remains in the repo root
+- [x] T-0127 Canonicalize spec docs around `crossfire_x_final.docx`; `crossfire_x_unified.docx` archived to `docs/archive/`
 - [x] T-0128 Reconcile code/config/test naming from RDMA/T5/T6 model to USB4 interconnect + T5 NVMe final spec model
 - [x] T-0129 Update setup scripts and hardware/config docs from TB5 RDMA prerequisites to USB4/Thunderbolt IP bridge + 5GbE fallback
 
@@ -83,7 +83,7 @@ Rule: Only mark a task done when the code, file, or artifact exists in this repo
 - [x] T-0306 `scripts/run_experiment.sh`
 - [x] T-0307 `configs/models.yaml` (includes MoE models, C0-C7 ablation matrix)
 - [x] T-0308 `configs/hardware.yaml` (includes T6 NVMe SSD)
-- [ ] T-0309 `scripts/build_flash_moe.sh` -- automate anemll-flash-llama.cpp cmake build
+- [x] T-0309 `scripts/build_flash_moe.sh` -- automate anemll-flash-llama.cpp cmake build
 
 ## Phase 4 - AutoPilot
 
@@ -95,9 +95,9 @@ Rule: Only mark a task done when the code, file, or artifact exists in this repo
 - [x] T-0406 `src/crossfire/autopilot/autopilot.py` (AutoPilotEngine, decision tree + bandit paths)
 - [x] T-0407 `src/crossfire/autopilot/decision_tree.py` (deterministic rule tree)
 - [x] T-0408 `configs/autopilot.yaml`
-- [ ] T-0409 Wire `configs/autopilot.yaml` loading into `AutoPilot.__init__()`
-- [ ] T-0410 Wire AutoPilot selection into pipeline execution
-- [ ] T-0411 Wire outcome reporting back into reward + bandit updates
+- [x] T-0409 Wire `configs/autopilot.yaml` loading into `AutoPilot.__init__()` (via `build_autopilot_from_yaml`)
+- [x] T-0410 Wire AutoPilot selection into pipeline execution (via `apply_selection_to_pipeline`)
+- [x] T-0411 Wire outcome reporting back into reward + bandit updates (via `run_autopilot_cycle`)
 - [ ] T-0412 Persist bandit state across runs
 - [ ] T-0413 Warm-start AutoPilot from calibration data
 - [ ] T-0414 Add end-to-end AutoPilot integration test
@@ -107,11 +107,11 @@ Rule: Only mark a task done when the code, file, or artifact exists in this repo
 - [x] T-0501 `tests/test_ane.py` (11 tests: draft model, power, speculative)
 - [x] T-0502 `tests/test_pipeline.py` (T6, execution_policy, P6 Flash-MoE)
 - [x] T-0503 `tests/test_metrics.py` (policy schema, P6 fields, 14-column table)
-- [ ] T-0504 `tests/test_flashmoe.py` -- FlashMoEMode, SlotBankConfig, FlashMoEBuildConfig, FlashMoERuntime
-- [ ] T-0505 `tests/test_triattention.py` -- KVCompressionStrategy, TriAttentionConfig
-- [ ] T-0506 `tests/test_decision_tree.py` -- all branches of `select_policy()`
-- [ ] T-0507 `tests/test_autopilot.py` -- classifier, bandit, reward, logger, orchestrator
-- [ ] T-0508 `tests/test_policy.py` -- P0-P6 availability filtering with `HardwareAvailability`
+- [x] T-0504 `tests/test_flashmoe.py` -- FlashMoEMode, SlotBankConfig, FlashMoEBuildConfig, FlashMoERuntime
+- [x] T-0505 `tests/test_triattention.py` -- KVCompressionStrategy, TriAttentionConfig
+- [x] T-0506 `tests/test_decision_tree.py` -- all branches of `select_policy()`
+- [x] T-0507 `tests/test_autopilot.py` -- classifier, bandit, reward, logger, orchestrator
+- [x] T-0508 `tests/test_policy.py` -- P0-P6 availability filtering with `HardwareAvailability`
 
 ## Phase 6 - Hardware Bring-Up And Calibration
 
@@ -171,8 +171,9 @@ Rule: Only mark a task done when the code, file, or artifact exists in this repo
 
 ## Immediate Priorities
 
-1. Add unit tests for missing modules: `test_flashmoe.py`, `test_triattention.py`, `test_decision_tree.py` (T-0504 to T-0506)
-2. Wire `configs/autopilot.yaml` loading into `AutoPilot.__init__()` (T-0409)
-3. Add `scripts/build_flash_moe.sh` for anemll-flash-llama.cpp build automation (T-0309)
-4. Canonicalize spec docs: archive `crossfire_x_unified.docx` so `crossfire_x_final.docx` is the only root spec (T-0127)
-5. Hardware bring-up: USB4 baseline and fallback link validation (T-0601 through T-0618)
+1. Hardware bring-up: USB4 cable, Thunderbolt IP bridge, iperf3 baseline, 5GbE fallback (T-0601 through T-0606)
+2. Model downloads + ANE draft conversion + Flash-MoE sidecar build (T-0607 through T-0612)
+3. Calibration baselines: P0/P1 reference runs, reward normalization lock-in (T-0613 through T-0618)
+4. Policy calibration runs P2-P6 (T-0619 through T-0625) and the C0-C7 ablation matrix (T-0626)
+5. Software-side follow-ups that don't block hardware: persist bandit state (T-0412),
+   warm-start from calibration data (T-0413), end-to-end AutoPilot integration test (T-0414)
