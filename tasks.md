@@ -115,7 +115,7 @@ Rule: Only mark a task done when the code, file, or artifact exists in this repo
 
 ## Phase 6 - Hardware Bring-Up And Calibration
 
-- [!] T-0601 Verify PC environment and run `scripts/setup_pc.sh`
+- [x] T-0601 Verify PC environment and run `scripts/setup_pc.sh` (Session 15; CUDA 13.2 toolkit + Node 22 prerequisites installed in WSL; EXO source-install + dashboard + CUDA llama.cpp build all green; `~/crossfire/exo/.venv/bin/exo -v` launches cleanly, discovers Mac peer at `192.168.4.41:52415` over WiFi mDNS; API live on `localhost:52415`)
 - [x] T-0602 Verify Mac environment and run `scripts/setup_mac.sh`
 - [!] T-0603 Acquire and verify USB4 40 Gbps active cable
 - [!] T-0604 Configure Thunderbolt IP bridge / TCP-IP networking between nodes

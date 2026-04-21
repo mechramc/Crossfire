@@ -5,6 +5,79 @@ Rule: update this file before every `git push`.
 
 ---
 
+## Session 15 - 2026-04-21: Phase 6 PC bring-up (T-0601) and CRLF shell-script fix
+
+### What was done
+
+**T-0601 executed end-to-end on PC (WSL2 Ubuntu 24.04):**
+- Installed prerequisites inside WSL: `build-essential`, the NVIDIA CUDA 13 apt
+  repo via `cuda-keyring_1.1-1_all.deb`, `cuda-toolkit-13-0` (resolved to CUDA
+  13.2.78), `cmake 3.28.3`, and Node 22 LTS via `nodesource setup_22.x` script
+- Appended properly-quoted CUDA exports (`PATH=/usr/local/cuda-13.2/bin:$PATH`
+  and `LD_LIBRARY_PATH=/usr/local/cuda-13.2/lib64`) to `~/.profile` so login
+  shells pick up `nvcc` -- earlier attempt was corrupted by unescaped Windows
+  `Program Files (x86)` paths
+- `scripts/setup_pc.sh` ran green: EXO source clone synced with `--extra cuda13`,
+  dashboard built (`npm install && npm run build`, 980 modules transformed),
+  llama.cpp TurboQuant+ fork built with `GGML_CUDA=ON` using 24 parallel jobs;
+  `ldd llama-cli` shows `libggml-cuda.so.0`, `libcudart.so.13`, `libcublas.so.13`,
+  `libcublasLt.so.13` linked against `/usr/local/cuda-13.2/lib64`
+- `~/crossfire/exo/.venv/bin/exo -v` launched cleanly with node id
+  `12D3KooWLeMLzYwnaBdSQagZW8...`, API live on `localhost:52415`, dashboard
+  banner printed; discovered Mac peer at `192.168.4.41:52415` over WiFi mDNS
+- `curl localhost:52415/node_id` and `/v1/models` both return valid responses
+
+**CRLF line-ending fix:**
+- Root cause: `.gitattributes` had only `* text=auto`, so Windows git with
+  `core.autocrlf=true` wrote CRLF to every `*.sh` on checkout. In WSL bash,
+  `set -euo pipefail\r` fails with "set: pipefail: invalid option name"
+  because `\r` is parsed as part of the option name, killing the script at
+  line 2
+- Fix: added `*.sh text eol=lf` to `.gitattributes` (commit `8872d62`); then
+  `git add --renormalize .` + working-tree re-checkout of the three shell
+  scripts (`setup_mac.sh`, `setup_pc.sh`, `build_flash_moe.sh`). All three now
+  have LF line terminators on disk and will stay LF on future clones/pulls
+
+**Interim workaround used during session:**
+- Before the `.gitattributes` fix, ran `scripts/setup_pc.sh` via
+  `bash <(tr -d "\r" < scripts/setup_pc.sh)` to strip CR on the fly.
+  This broke because `BASH_SOURCE[0]` resolves to `/dev/fd/NN` under process
+  substitution, so `PROJECT_ROOT` became `/dev` and the llama.cpp clone
+  targeted `/dev/vendor/llama.cpp`. Switched to converting the working-tree
+  file in place with `tr -d "\r"`, which let the script run normally
+
+**Tracker updates:**
+- `tasks.md` -- T-0601 marked done with session-15 verification notes
+- `status.md` -- latest commit, Phase 6 PC bring-up summary, `Not Started`
+  section clarified (USB4 tasks deferred per `memory/interconnect.md` because
+  the active interconnect is WiFi), Immediate Next Work reordered to lead with
+  model downloads / ANE conversion / Flash-MoE build now that both nodes are
+  running EXO
+- `checkpoint.md` -- this entry
+
+### Verification
+- `nvcc --version` in login shell: `release 13.2, V13.2.78`
+- `cmake --version`: `3.28.3`
+- `node --version && npm --version`: `v22.22.2` / `10.9.7`
+- `ldd vendor/llama.cpp/build/bin/llama-cli | grep -iE 'cuda|cublas'`:
+  `libggml-cuda.so.0`, `libcudart.so.13`, `libcublas.so.13`, `libcublasLt.so.13`,
+  `libcuda.so.1` (WSL GPU passthrough via `/usr/lib/wsl/lib/libcuda.so.1`)
+- `curl -s http://localhost:52415/node_id`:
+  `"12D3KooWLeMLzYwnaBdSQagZW8KiTZMBFqtnw2nqRyhdSFzn3cGM"`
+- `file scripts/*.sh`: all report Bourne-Again shell script without "CRLF line
+  terminators"
+
+### State at end of session
+- PC bring-up complete; T-0601 closed; EXO + llama.cpp (CUDA) both runnable
+- Both nodes running EXO and discovering each other over WiFi libp2p; ready
+  for model downloads and calibration without USB4
+- Shell-script CRLF landmine closed at the repo level (`.gitattributes`);
+  future clones on Windows will not regress
+- iperf3 still not installed on either node; needed for eventual T-0605 USB4
+  baseline, not urgent while WiFi is the active path
+
+---
+
 ## Session 14 - 2026-04-21: Phase 6 Mac bring-up (T-0602) and setup-script fixes
 
 ### What was done

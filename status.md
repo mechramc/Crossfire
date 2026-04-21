@@ -2,8 +2,8 @@
 
 Last updated: 2026-04-21
 Branch: main
-Latest commit: 12b233e (merged with origin/main; setup script fixes pending this session)
-Tracker state: software-layer tasks closed; Phase 6 hardware bring-up in progress. T-0602 (Mac) done; T-0601 (PC) unblocked.
+Latest commit: 8872d62 (chore: force LF line endings for shell scripts)
+Tracker state: software-layer tasks closed; Phase 6 hardware bring-up in progress. T-0601 (PC) and T-0602 (Mac) done; EXO nodes discovering each other over WiFi. USB4 tasks T-0603/T-0604/T-0605 deferred until cable is acquired.
 
 ## Summary
 
@@ -47,8 +47,9 @@ the repo root is `crossfire_x_final.docx`; the prior unified spec is archived.
 
 ## Not Started
 
-- Hardware bring-up: USB4 cable, Thunderbolt IP bridge, iperf3 baselines,
-  model downloads, ANE model conversion (T-0601, T-0603 through T-0612)
+- USB4 hardware path: cable acquisition, Thunderbolt IP bridge, iperf3 baseline
+  (T-0603 through T-0605) -- deferred; active interconnect is WiFi per `memory/interconnect.md`
+- Model downloads, ANE conversion, Flash-MoE build (T-0607 through T-0612)
 - Calibration runs for every policy (T-0613 through T-0626)
 - Orion Forge serving (Phase 7)
 - Textual dashboard and final evaluation deliverables (Phase 8)
@@ -64,10 +65,15 @@ the repo root is `crossfire_x_final.docx`; the prior unified spec is archived.
 ## Immediate Next Work
 
 Phase 6 (Hardware Bring-Up And Calibration):
-1. Run `scripts/setup_pc.sh` on the PC (T-0601); EXO binary, llama.cpp CUDA build, dashboard assets
-2. Install iperf3 on Mac (`brew install iperf3`) and PC for T-0605 baseline
-3. Acquire USB4 40 Gbps active cable; configure Thunderbolt IP bridge between nodes
-4. Record USB4 iperf3 baseline; validate 5GbE fallback
-5. Download 27B / 0.6B / 35B-A3B models; convert 0.6B draft to ANE CoreML
-6. Build Rustane and anemll-flash-llama.cpp; extract MoE sidecar
-7. Record P0/P1 baselines; lock reward normalization constants
+1. Download 27B / 0.6B / 35B-A3B models to both nodes (T-0607, T-0608, T-0612)
+2. Convert 0.6B draft to ANE CoreML (T-0609); build Rustane (T-0610); build
+   anemll-flash-llama.cpp with CUDA on PC and Metal on Mac (T-0611)
+3. Record P0 single-node baselines on PC and Mac (T-0613, T-0614)
+4. Record P1 distributed baseline over WiFi at 8K/16K/32K (T-0617)
+5. Lock reward normalization constants from P1 baseline (T-0618)
+6. Policy calibrations P2-P6 (T-0619 through T-0625) -> C0-C7 matrix (T-0626)
+
+Deferred (hardware):
+- USB4 40 Gbps cable + Thunderbolt IP bridge + throughput baseline (T-0603/T-0604/T-0605).
+  Active interconnect is WiFi; composed TriAttention + TurboQuant compression is the
+  bandwidth-hiding strategy. Revisit once the cable is acquired.
