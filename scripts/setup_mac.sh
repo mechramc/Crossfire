@@ -3,8 +3,14 @@ set -euo pipefail
 
 # =============================================================================
 # CROSSFIRE-X — Mac (Apple Silicon) Environment Setup
-# Installs EXO + llama.cpp + ANEMLL + Rustane with Metal/ANE support.
+# Installs EXO (from source, via uv) + llama.cpp + ANEMLL + Rustane with
+# Metal/ANE support.
 # Interconnect: TCP/IP over USB4 (primary) with 5GbE fallback (no RDMA).
+#
+# NOTE: EXO lives at EXO_DIR (default ~/crossfire/exo) as a source clone
+# managed by uv. The runtime binary is $EXO_DIR/.venv/bin/exo -- no global
+# `exo` is installed. On macOS no extra is required (mlx comes from the
+# darwin-gated git source in EXO's pyproject.toml).
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -54,15 +60,28 @@ if command -v networksetup &>/dev/null; then
     echo "  System Settings -> Network -> ... -> Add Service -> Thunderbolt Bridge"
 fi
 
-# --- Install EXO ---
+# --- Install / update EXO (from source, managed by uv) ---
 echo ""
-echo "--- Installing EXO 1.0 ---"
-if command -v exo &>/dev/null; then
-    echo "EXO already installed: $(exo --version 2>/dev/null || echo 'version unknown')"
-else
-    echo "Installing EXO..."
-    pip install exo-inference
+echo "--- Installing / updating EXO ---"
+EXO_DIR="${EXO_DIR:-$HOME/crossfire/exo}"
+
+if ! command -v uv &>/dev/null; then
+    echo "ERROR: uv not found. Install: curl -LsSf https://astral.sh/uv/install.sh | sh"
+    exit 1
 fi
+
+if [ -d "$EXO_DIR/.git" ]; then
+    echo "EXO clone already exists at $EXO_DIR, pulling latest..."
+    git -C "$EXO_DIR" pull --ff-only
+else
+    echo "Cloning EXO to $EXO_DIR..."
+    mkdir -p "$(dirname "$EXO_DIR")"
+    git clone https://github.com/exo-explore/exo.git "$EXO_DIR"
+fi
+
+echo "Syncing EXO venv (this may be multi-GB on first run)..."
+(cd "$EXO_DIR" && uv sync)
+echo "EXO binary: $EXO_DIR/.venv/bin/exo"
 
 # --- Clone llama.cpp (TurboQuant+ fork) ---
 LLAMA_DIR="$PROJECT_ROOT/vendor/llama.cpp"
@@ -137,7 +156,7 @@ fi
 
 echo ""
 echo "=== Mac setup complete ==="
-echo "EXO:       $(command -v exo || echo 'install manually')"
+echo "EXO:       $EXO_DIR/.venv/bin/exo"
 echo "llama.cpp: $LLAMA_DIR/build/bin/"
 echo "ANEMLL:    $ANEMLL_DIR"
 echo "Rustane:   $RUSTANE_DIR"
@@ -148,4 +167,4 @@ echo "  2. Convert Qwen3.5-0.6B to ANE format via ANEMLL"
 echo "  3. Connect USB4 40 Gbps active cable to PC"
 echo "  4. Ensure Thunderbolt Bridge service is active in System Settings -> Network"
 echo "  5. Verify: iperf3 between nodes (see above)"
-echo "  6. Run: exo discover  (verify PC is visible)"
+echo "  6. Run: $EXO_DIR/.venv/bin/exo  (verify PC is visible)"

@@ -3,8 +3,12 @@ set -euo pipefail
 
 # =============================================================================
 # CROSSFIRE-X — PC/WSL2 Environment Setup
-# Installs EXO + llama.cpp (TurboQuant+ fork) with CUDA support.
+# Installs EXO (from source, via uv) + llama.cpp (TurboQuant+ fork) with CUDA.
 # Interconnect: TCP/IP over USB4 (primary) with 5GbE fallback (no RDMA).
+#
+# NOTE: This script is intended to run INSIDE WSL2 (Ubuntu). EXO lives at
+# EXO_DIR (default ~/crossfire/exo) as a source clone managed by uv -- there
+# is no global `exo` on PATH; the runtime binary is $EXO_DIR/.venv/bin/exo.
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,15 +24,40 @@ if ! command -v nvcc &>/dev/null; then
 fi
 echo "CUDA version: $(nvcc --version | grep release | awk '{print $6}')"
 
-# --- Install EXO ---
+# --- Install / update EXO (from source, managed by uv) ---
 echo ""
-echo "--- Installing EXO 1.0 ---"
-if command -v exo &>/dev/null; then
-    echo "EXO already installed: $(exo --version 2>/dev/null || echo 'version unknown')"
-else
-    echo "Installing EXO..."
-    pip install exo-inference
+echo "--- Installing / updating EXO ---"
+EXO_DIR="${EXO_DIR:-$HOME/crossfire/exo}"
+
+# Pick the CUDA extra based on the installed toolkit. EXO's pyproject.toml
+# requires an explicit --extra (cuda12 / cuda13 / cpu); a plain `uv sync`
+# will UNINSTALL all nvidia-* and mlx-cuda-* packages.
+CUDA_MAJOR="$(nvcc --version | sed -n 's/.*release \([0-9]*\).*/\1/p')"
+case "$CUDA_MAJOR" in
+    13) EXO_EXTRA="cuda13" ;;
+    12) EXO_EXTRA="cuda12" ;;
+    *)  echo "WARNING: unrecognized CUDA major version '$CUDA_MAJOR'; defaulting to cpu extra"
+        EXO_EXTRA="cpu" ;;
+esac
+echo "EXO extra: $EXO_EXTRA"
+
+if ! command -v uv &>/dev/null; then
+    echo "ERROR: uv not found. Install: curl -LsSf https://astral.sh/uv/install.sh | sh"
+    exit 1
 fi
+
+if [ -d "$EXO_DIR/.git" ]; then
+    echo "EXO clone already exists at $EXO_DIR, pulling latest..."
+    git -C "$EXO_DIR" pull --ff-only
+else
+    echo "Cloning EXO to $EXO_DIR..."
+    mkdir -p "$(dirname "$EXO_DIR")"
+    git clone https://github.com/exo-explore/exo.git "$EXO_DIR"
+fi
+
+echo "Syncing EXO venv with --extra $EXO_EXTRA (this may be multi-GB on first run)..."
+(cd "$EXO_DIR" && uv sync --extra "$EXO_EXTRA")
+echo "EXO binary: $EXO_DIR/.venv/bin/exo"
 
 # --- Clone llama.cpp (TurboQuant+ fork) ---
 LLAMA_DIR="$PROJECT_ROOT/vendor/llama.cpp"
@@ -74,7 +103,7 @@ fi
 
 echo ""
 echo "=== PC setup complete ==="
-echo "EXO:       $(command -v exo || echo 'install manually')"
+echo "EXO:       $EXO_DIR/.venv/bin/exo"
 echo "llama.cpp: $LLAMA_DIR/build/bin/"
 echo ""
 echo "Next steps:"
@@ -82,4 +111,4 @@ echo "  1. Download models to $PROJECT_ROOT/models/"
 echo "  2. Connect USB4 40 Gbps active cable to Mac Studio"
 echo "  3. Configure the Thunderbolt IP bridge on both machines (static IPs or link-local)"
 echo "  4. Verify: iperf3 between nodes (see above)"
-echo "  5. Run: exo discover  (verify Mac is visible)"
+echo "  5. Run: $EXO_DIR/.venv/bin/exo  (verify Mac is visible)"
