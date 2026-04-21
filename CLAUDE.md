@@ -170,5 +170,6 @@ ASUS BIOS: enable AI Cache Boost for LLM workloads on the 5090 node.
 - ANEMLL: github.com/Anemll/Anemll
 - Rustane: github.com/ncdrone/rustane
 - AtomGradient: github.com/AtomGradient/hybrid-ane-mlx-bench
-- TurboQuant+: github.com/TheTom/turboquant_plus
+- TurboQuant+ (research workspace): github.com/TheTom/turboquant_plus
+- TurboQuant+ llama.cpp fork (build target for T-0601/T-0602): github.com/TheTom/llama-cpp-turboquant
 - TriAttention: arXiv:2604.04921

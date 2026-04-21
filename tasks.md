@@ -116,7 +116,7 @@ Rule: Only mark a task done when the code, file, or artifact exists in this repo
 ## Phase 6 - Hardware Bring-Up And Calibration
 
 - [!] T-0601 Verify PC environment and run `scripts/setup_pc.sh`
-- [!] T-0602 Verify Mac environment and run `scripts/setup_mac.sh`
+- [x] T-0602 Verify Mac environment and run `scripts/setup_mac.sh`
 - [!] T-0603 Acquire and verify USB4 40 Gbps active cable
 - [!] T-0604 Configure Thunderbolt IP bridge / TCP-IP networking between nodes
 - [!] T-0605 Measure USB4 throughput between nodes and record baseline

@@ -5,6 +5,53 @@ Rule: update this file before every `git push`.
 
 ---
 
+## Session 14 - 2026-04-21: Phase 6 Mac bring-up (T-0602) and setup-script fixes
+
+### What was done
+
+**T-0602 executed end-to-end on Mac:**
+- `sudo sysctl iogpu.wired_limit_mb=58982` set
+- EXO cloned to `~/crossfire/exo`, `uv sync` completed (172 packages resolved)
+- EXO dashboard built (`npm install && npm run build`, 980 modules transformed)
+- llama.cpp TurboQuant+ fork cloned to `vendor/llama.cpp`, built with `GGML_METAL=ON` +
+  `GGML_ACCELERATE=ON`; `llama-cli` loads with `turbo3 using 4-mag LUT` and sparse V
+  dequant enabled
+- ANEMLL cloned to `vendor/anemll`; Rustane cloned to `vendor/rustane`
+- EXO binary `~/crossfire/exo/.venv/bin/exo --help` runs without import error
+
+**Setup-script bugs found and fixed:**
+- `scripts/setup_mac.sh:94` -- wrong llama.cpp fork URL; was `TheTom/llama.cpp.git` (404),
+  corrected to `TheTom/llama-cpp-turboquant.git`
+- `scripts/setup_pc.sh:70` -- identical wrong URL fixed the same way
+- Both scripts: added EXO dashboard build step (`npm install && npm run build` in
+  `$EXO_DIR/dashboard`) after `uv sync`. Without this, EXO fails at import time because
+  `exo.shared.constants` resolves dashboard assets on module load. Includes an npm
+  presence check that matches the existing `uv` / `cargo` check style.
+- `CLAUDE.md` Key References: added the llama.cpp fork pointer
+  (`github.com/TheTom/llama-cpp-turboquant`) alongside the existing research-workspace
+  pointer (`github.com/TheTom/turboquant_plus`), and labeled which is which.
+
+**Tracker updates:**
+- `tasks.md` -- T-0602 marked done
+- `status.md` -- Latest commit, Phase 6 progress, iperf3 prerequisite, and Immediate
+  Next Work reordered (T-0601 now first)
+- `checkpoint.md` -- this entry
+
+### Verification
+- `~/crossfire/exo/.venv/bin/exo --help` -- full usage output, no traceback
+- `vendor/llama.cpp/build/bin/llama-cli --version` -- Metal backend loads cleanly
+- `vendor/llama.cpp` origin = `TheTom/llama-cpp-turboquant` @ `4d24ad87b`
+- `sysctl -n iogpu.wired_limit_mb` -- 58982
+- Build log: `results/raw/setup_mac_20260421_*.log` -- zero errors, benign warnings only
+
+### State at end of session
+- Mac bring-up complete; T-0602 closed
+- T-0601 (PC) unblocked by both setup-script fixes (URL + dashboard build)
+- iperf3 still missing on both nodes; required before T-0605 USB4 throughput baseline
+- `results/raw/` contains the setup and dashboard build logs (gitignored)
+
+---
+
 ## Session 13 - 2026-04-21: Implementation-layer USB4/TCP-IP migration (T-0128, T-0129)
 
 ### What was done

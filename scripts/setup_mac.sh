@@ -81,6 +81,16 @@ fi
 
 echo "Syncing EXO venv (this may be multi-GB on first run)..."
 (cd "$EXO_DIR" && uv sync)
+
+# EXO's exo.shared.constants imports dashboard assets at module load -- without
+# a dashboard build, the exo binary fails at import time. Must run after every
+# fresh clone / upstream pull.
+if ! command -v npm &>/dev/null; then
+    echo "ERROR: npm not found. Install Node 22 LTS and re-run."
+    exit 1
+fi
+echo "Building EXO dashboard assets (npm install && npm run build)..."
+(cd "$EXO_DIR/dashboard" && npm install && npm run build)
 echo "EXO binary: $EXO_DIR/.venv/bin/exo"
 
 # --- Clone llama.cpp (TurboQuant+ fork) ---
@@ -91,7 +101,7 @@ if [ -d "$LLAMA_DIR" ]; then
 else
     echo "Cloning llama.cpp (TurboQuant+ fork)..."
     mkdir -p "$PROJECT_ROOT/vendor"
-    git clone https://github.com/TheTom/llama.cpp.git "$LLAMA_DIR"
+    git clone https://github.com/TheTom/llama-cpp-turboquant.git "$LLAMA_DIR"
 fi
 
 # --- Build with Metal ---

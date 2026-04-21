@@ -51,6 +51,9 @@ models/
 # Raw benchmark data (processed results ARE tracked)
 results/raw/
 
+# External source clones managed by setup scripts (EXO llama.cpp fork, ANEMLL, Rustane)
+vendor/
+
 # -----------------------------------------------------------------------------
 # OS
 # -----------------------------------------------------------------------------

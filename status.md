@@ -2,8 +2,8 @@
 
 Last updated: 2026-04-21
 Branch: main
-Latest commit: 89541ce (`fix(scripts): install EXO from source via uv with explicit CUDA extra`)
-Tracker state: all software-layer tasks closed; repo ready for Phase 6 hardware bring-up.
+Latest commit: 12b233e (merged with origin/main; setup script fixes pending this session)
+Tracker state: software-layer tasks closed; Phase 6 hardware bring-up in progress. T-0602 (Mac) done; T-0601 (PC) unblocked.
 
 ## Summary
 
@@ -48,7 +48,7 @@ the repo root is `crossfire_x_final.docx`; the prior unified spec is archived.
 ## Not Started
 
 - Hardware bring-up: USB4 cable, Thunderbolt IP bridge, iperf3 baselines,
-  model downloads, ANE model conversion (T-0601 through T-0612)
+  model downloads, ANE model conversion (T-0601, T-0603 through T-0612)
 - Calibration runs for every policy (T-0613 through T-0626)
 - Orion Forge serving (Phase 7)
 - Textual dashboard and final evaluation deliverables (Phase 8)
@@ -64,9 +64,10 @@ the repo root is `crossfire_x_final.docx`; the prior unified spec is archived.
 ## Immediate Next Work
 
 Phase 6 (Hardware Bring-Up And Calibration):
-1. Verify PC and Mac environments; run `scripts/setup_pc.sh` and `scripts/setup_mac.sh`
-2. Acquire USB4 40 Gbps active cable; configure Thunderbolt IP bridge between nodes
-3. Record USB4 iperf3 baseline; validate 5GbE fallback
-4. Download 27B / 0.6B / 35B-A3B models; convert 0.6B draft to ANE CoreML
-5. Build Rustane and anemll-flash-llama.cpp; extract MoE sidecar
-6. Record P0/P1 baselines; lock reward normalization constants
+1. Run `scripts/setup_pc.sh` on the PC (T-0601); EXO binary, llama.cpp CUDA build, dashboard assets
+2. Install iperf3 on Mac (`brew install iperf3`) and PC for T-0605 baseline
+3. Acquire USB4 40 Gbps active cable; configure Thunderbolt IP bridge between nodes
+4. Record USB4 iperf3 baseline; validate 5GbE fallback
+5. Download 27B / 0.6B / 35B-A3B models; convert 0.6B draft to ANE CoreML
+6. Build Rustane and anemll-flash-llama.cpp; extract MoE sidecar
+7. Record P0/P1 baselines; lock reward normalization constants
