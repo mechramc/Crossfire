@@ -56,8 +56,8 @@ Rule: Only mark a task done when the code, file, or artifact exists in this repo
 - [x] T-0125 Update `CLAUDE.md` for final build spec framing and current implementation mismatch notes
 - [x] T-0126 Update `status.md` and `checkpoint.md` for final build spec state
 - [~] T-0127 Canonicalize spec docs around `crossfire_x_final.docx`; `crossfire_x_unified.docx` still remains in the repo root
-- [ ] T-0128 Reconcile code/config/test naming from RDMA/T5/T6 model to USB4 interconnect + T5 NVMe final spec model
-- [ ] T-0129 Update setup scripts and hardware/config docs from TB5 RDMA prerequisites to USB4/Thunderbolt IP bridge + 5GbE fallback
+- [x] T-0128 Reconcile code/config/test naming from RDMA/T5/T6 model to USB4 interconnect + T5 NVMe final spec model
+- [x] T-0129 Update setup scripts and hardware/config docs from TB5 RDMA prerequisites to USB4/Thunderbolt IP bridge + 5GbE fallback
 
 ## Phase 2 - Core Library Scaffolds
 
@@ -171,8 +171,8 @@ Rule: Only mark a task done when the code, file, or artifact exists in this repo
 
 ## Immediate Priorities
 
-1. Reconcile the implementation layer with the final USB4 build spec: code, configs, scripts, and tests (T-0128, T-0129)
-2. Add unit tests for missing modules: `test_flashmoe.py`, `test_triattention.py`, `test_decision_tree.py` (T-0504 to T-0506)
-3. Wire `configs/autopilot.yaml` loading into `AutoPilot.__init__()` (T-0409)
-4. Add `scripts/build_flash_moe.sh` for anemll-flash-llama.cpp build automation (T-0309)
+1. Add unit tests for missing modules: `test_flashmoe.py`, `test_triattention.py`, `test_decision_tree.py` (T-0504 to T-0506)
+2. Wire `configs/autopilot.yaml` loading into `AutoPilot.__init__()` (T-0409)
+3. Add `scripts/build_flash_moe.sh` for anemll-flash-llama.cpp build automation (T-0309)
+4. Canonicalize spec docs: archive `crossfire_x_unified.docx` so `crossfire_x_final.docx` is the only root spec (T-0127)
 5. Hardware bring-up: USB4 baseline and fallback link validation (T-0601 through T-0618)

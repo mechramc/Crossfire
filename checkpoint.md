@@ -5,6 +5,49 @@ Rule: update this file before every `git push`.
 
 ---
 
+## Session 13 - 2026-04-21: Implementation-layer USB4/TCP-IP migration (T-0128, T-0129)
+
+### What was done
+
+**Code / config / test migration (commits e8c1698, d3c78c2):**
+- `src/crossfire/distributed/pipeline.py` -- T5_RDMA removed; T6_NVME_SSD renumbered to T5;
+  ComputeTarget enum now T1-T5 matching the final spec
+- `src/crossfire/distributed/network.py` -- InterconnectType now usb4 / 5gbe / wifi; RDMA
+  path deleted; explanatory note retained
+- `src/crossfire/autopilot/policy.py` -- renamed `rdma_available` ->
+  `distributed_available`, `requires_rdma` -> `requires_distributed`; P0-P6 descriptions
+  rewritten to match final-spec Section 9 (P4 is TriAttention KV only, not TQ4_1S)
+- `src/crossfire/utils/metrics.py` -- replaced boolean `rdma_active` with `interconnect`
+  string label ("usb4"/"5gbe"/"wifi") plus `interconnect_bytes` counter to quantify
+  compression savings on the data path
+- `configs/hardware.yaml` -- `network: thunderbolt5_rdma` block replaced with
+  `interconnect:` block containing `primary` (usb4), `fallback` (5gbe), `dev` (wifi)
+- `scripts/setup_mac.sh`, `scripts/setup_pc.sh` -- RDMA/rdma_ctl enablement removed;
+  Thunderbolt IP bridge guidance, iperf3 throughput probe, and nc reachability check added
+- `tests/test_metrics.py` -- fixtures updated for new interconnect fields; added a
+  round-trip test for `interconnect` + `interconnect_bytes`
+
+**Tracker reconciliation:**
+- `tasks.md` -- T-0128 and T-0129 marked done; Immediate Priorities updated
+- `status.md` -- rewritten to reflect the completed migration; stale RDMA/T5/T6
+  mismatch callouts removed
+- `checkpoint.md` -- this entry added
+
+### Verification
+- `pytest`: 29 passed
+- `ruff check .`: clean
+- `ruff format --check .`: clean
+- `grep -rn "T5_RDMA|T6_NVME_SSD"` in src/, configs/, scripts/, tests/: no matches
+- Remaining `rdma` mentions in code are explanatory ("no RDMA" / "RDMA is not supported")
+
+### State at end of session
+- Implementation layer matches `crossfire_x_final.docx`
+- No stale RDMA/T5/T6 naming in code, configs, scripts, or tests
+- Outstanding work: unit tests for Flash-MoE / TriAttention / decision tree, AutoPilot
+  yaml wiring, Flash-MoE build script, spec-doc canonicalization, hardware bring-up
+
+---
+
 ## Session 12 - 2026-04-11: Final build spec doc and tracker reconciliation
 
 ### What was done

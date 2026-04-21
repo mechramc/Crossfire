@@ -114,8 +114,6 @@ python -m benchmarks.perplexity --model models/qwen3.5-27b-tq4_1s.gguf
 - Measure power per-target (use `powermetrics` on Mac, `nvidia-smi` on PC)
 - Gate Flash-MoE paths behind `flash_moe_available` in `HardwareAvailability` --
   P6 must not be selectable until anemll-flash-llama.cpp is built and verified
-- Treat the current RDMA/T5/T6 naming in code as legacy scaffold state until the implementation
-  layer is reconciled with the final USB4 build spec
 
 ## Don'ts
 
@@ -127,8 +125,6 @@ python -m benchmarks.perplexity --model models/qwen3.5-27b-tq4_1s.gguf
 - Don't use CoreML `compute_units=ALL` -- macOS 26.3 routes to GPU, not ANE. Use direct API.
 - Don't use turbo3/turbo4 KV as the primary KV strategy -- TriAttention is the new primary.
   turbo3 remains in `kvcache.py` as a legacy fallback only.
-- Don't claim the final spec migration is complete at the code layer while `src/`, `configs/`,
-  `scripts/`, and tests still encode the older RDMA/T5/T6 model
 
 ## Hardware Context
 
@@ -145,8 +141,6 @@ ASUS BIOS: enable AI Cache Boost for LLM workloads on the 5090 node.
 ## Known Constraints
 
 - EXO over USB4/TCP-IP is less proven than the earlier TB5 RDMA framing
-- The repo implementation still models the interconnect as `T5_RDMA` and the SSD as `T6`; this is
-  a known naming mismatch against the final build spec
 - TQ4_1S requires TheTom/turboquant_plus fork, not mainline llama.cpp
 - ANE has 32 MB SRAM cliff (30% throughput drop beyond it)
 - ANE dimension efficiency cliff at dim=5120 (4.7x penalty -- keep <=4096)

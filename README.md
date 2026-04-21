@@ -111,9 +111,8 @@ ruff check .
 ruff format --check .
 ```
 
-> The final build spec assumes EXO over USB4 plus a 5GbE fallback. The current setup scripts and
-> code scaffolds still contain older RDMA-oriented naming; see `status.md` for the remaining
-> reconciliation work.
+> The final build spec assumes EXO over USB4 plus a 5GbE fallback. Setup scripts and code
+> scaffolds are aligned with that spec; see `status.md` for remaining bring-up work.
 
 ## Ablation Matrix (C0-C7)
 
