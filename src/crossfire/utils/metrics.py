@@ -38,8 +38,11 @@ class BenchmarkResult:
         ane_role: ANE role if active ("draft", "policy_model", etc.).
         total_power_watts: Total system power in watts.
         ane_power_watts: ANE-specific power in watts.
-        rdma_active: True if RDMA (T5) was active.
-        flash_moe_active: True if Flash-MoE (T6 NVMe SSD) was active.
+        interconnect: Physical interconnect label used for distributed runs
+            (e.g. "usb4", "5gbe", "1gbe", "wifi"). None for single-node runs.
+        interconnect_bytes: Bytes transferred across the interconnect during
+            the run. Used to quantify compression savings.
+        flash_moe_active: True if Flash-MoE (T5 NVMe SSD) was active.
     """
 
     model: str
@@ -61,7 +64,8 @@ class BenchmarkResult:
     ane_role: str | None = None
     total_power_watts: float | None = None
     ane_power_watts: float | None = None
-    rdma_active: bool = False
+    interconnect: str | None = None
+    interconnect_bytes: int | None = None
     flash_moe_active: bool = False
     timestamp: str = field(default_factory=lambda: datetime.now(tz=timezone.utc).isoformat())
 

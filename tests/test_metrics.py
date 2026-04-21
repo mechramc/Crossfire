@@ -22,7 +22,8 @@ def test_benchmark_result_to_row_complete():
         acceptance_rate=0.72,
         total_power_watts=415.0,
         ane_power_watts=3.2,
-        rdma_active=True,
+        interconnect="usb4",
+        interconnect_bytes=63_000_000,
     )
     row = result.to_row()
     assert len(row) == len(TABLE_HEADERS)
@@ -87,7 +88,8 @@ def test_benchmark_result_defaults():
     assert result.execution_policy == "P0"
     assert result.ablation_config is None
     assert result.ane_active is False
-    assert result.rdma_active is False
+    assert result.interconnect is None
+    assert result.interconnect_bytes is None
     assert result.distributed is False
     assert result.flash_moe_active is False
     assert result.acceptance_rate is None
@@ -105,9 +107,24 @@ def test_flash_moe_result():
         flash_moe_hit_rate=0.82,
         flash_moe_active=True,
         distributed=True,
-        rdma_active=True,
+        interconnect="wifi",
     )
     row = result.to_row()
     assert row[0] == "C1"
     assert row[5] == "53.0"
     assert row[12] == "0.82"
+
+
+def test_interconnect_field():
+    """interconnect and interconnect_bytes round-trip correctly."""
+    result = BenchmarkResult(
+        model="qwen3.5-27b",
+        quant_type="TQ4_1S",
+        context_size=8192,
+        execution_policy="P5",
+        distributed=True,
+        interconnect="usb4",
+        interconnect_bytes=63_000_000,
+    )
+    assert result.interconnect == "usb4"
+    assert result.interconnect_bytes == 63_000_000

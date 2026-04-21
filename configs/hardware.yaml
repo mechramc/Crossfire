@@ -1,5 +1,6 @@
 # Hardware profiles for CROSSFIRE-X
-# Six compute targets across two machines: T1–T5 (original) + T6 (NVMe SSD for Flash-MoE)
+# Five compute targets across two machines: T1-T5.
+# Interconnect is TCP/IP (USB4 in production, WiFi/5GbE during dev).
 
 nodes:
   pc:
@@ -68,14 +69,14 @@ nodes:
           - Speculative decode verification
           - AutoPilot policy model (lightweight)
 
-      - target: nvme_ssd    # T6 — Flash-MoE expert streaming
+      - target: nvme_ssd    # T5 — Flash-MoE expert streaming
         role: expert_streaming
         specs:
           effective_bandwidth_gb_s: 4.7  # pread() sustained on Mac Studio SSD
           capacity_tb: 1                  # typical Mac Studio SSD
           power_watts: 1
         notes: >
-          T6 is used only by P6 (Flash-MoE slot-bank). When the slot-bank
+          T5 is used only by P6 (Flash-MoE slot-bank). When the slot-bank
           hot-expert cache misses, expert weights are loaded from NVMe via
           pread() in anemll-flash-llama.cpp. With temporal prefetch enabled,
           hit rate approaches 100% after warmup — NVMe loads drop to near zero
@@ -86,13 +87,26 @@ nodes:
       iogpu_wired_limit_mb: 58982  # sudo sysctl iogpu.wired_limit_mb=58982
       # Unlocks ~90% of 64 GB for Metal. Required before any inference run.
 
-network:
-  interconnect: thunderbolt5_rdma    # T5
-  bandwidth_gbps: 80
-  latency_us: 3
-  rdma_enabled: true
-  # Enable RDMA: Recovery mode → rdma_ctl enable
-  # Requires: macOS Tahoe 26.2+, genuine TB5 cable (not TB4 — different connector)
-  notes: >
-    EXO 1.0 uses IBV-based RDMA over TB5. Reduces KV streaming latency
-    from ~300µs (TCP) to ~3µs. Required for P1–P6 distributed policies.
+# TCP/IP interconnect. All distributed policies (P1–P6) run over this link.
+# No RDMA: composed TriAttention + TurboQuant (6.8x KV reduction) makes
+# USB4/5GbE bandwidth sufficient (crossfire_x_final.docx §2, §4.2).
+interconnect:
+  primary:
+    link: usb4                  # production target: 40 Gbps active cable
+    bandwidth_gbps: 40
+    latency_us: 300             # TCP/IP round-trip
+    cable: "USB4 40 Gbps active, 2–3 m (Cable Matters / Anker, ~$30–50)"
+    setup: >
+      Thunderbolt IP bridge must be configured on both machines so that
+      USB4 presents as a TCP/IP network interface. Verify with
+      `iperf3` between nodes after cable is connected.
+  fallback:
+    link: 5gbe                  # onboard Realtek 5GbE on ASUS ROG STRIX X870E-E
+    bandwidth_gbps: 5
+    latency_us: 500
+    notes: "Used for EXO discovery and as data-path fallback if USB4 is unavailable."
+  dev:
+    link: wifi                  # current bring-up link (WiFi 7)
+    bandwidth_gbps: 1
+    latency_us: 2000
+    notes: "Development / bring-up only. Expect reduced decode throughput."

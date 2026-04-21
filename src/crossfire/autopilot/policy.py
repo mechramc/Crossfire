@@ -1,4 +1,11 @@
-"""Execution-policy registry for CROSSFIRE-X AutoPilot."""
+"""Execution-policy registry for CROSSFIRE-X AutoPilot.
+
+Policies follow crossfire_x_final.docx Section 9. All distributed policies
+(P1-P6) run over TCP/IP between nodes -- the physical link is USB4 at
+40 Gbps in production and WiFi/5GbE during bring-up. No policy requires
+RDMA; composed TriAttention + TurboQuant compression (6.8x KV reduction)
+makes the TCP/IP bandwidth envelope sufficient.
+"""
 
 from __future__ import annotations
 
@@ -26,7 +33,7 @@ class ExecutionPolicy(Enum):
 class HardwareAvailability:
     """Runtime hardware and artifact availability for policy filtering."""
 
-    rdma_available: bool = False
+    distributed_available: bool = False  # EXO peer reachable over TCP/IP
     ane_available: bool = False
     tq4_1s_available: bool = False
     turbo_kv_available: bool = False
@@ -44,7 +51,7 @@ class PolicyConfig:
     uses_tq4_1s: bool
     uses_turbo_kv: bool
     uses_flash_moe: bool = False
-    requires_rdma: bool = False
+    requires_distributed: bool = False
     requires_ane: bool = False
     requires_tq4_1s: bool = False
     requires_turbo_kv: bool = False
@@ -53,7 +60,7 @@ class PolicyConfig:
     def is_available(self, hardware: HardwareAvailability) -> bool:
         """Return whether the policy is runnable with the current hardware."""
 
-        if self.requires_rdma and not hardware.rdma_available:
+        if self.requires_distributed and not hardware.distributed_available:
             return False
         if self.requires_ane and not hardware.ane_available:
             return False
@@ -67,7 +74,7 @@ class PolicyConfig:
 POLICY_REGISTRY: dict[ExecutionPolicy, PolicyConfig] = {
     ExecutionPolicy.P0: PolicyConfig(
         policy=ExecutionPolicy.P0,
-        description="Single best node fallback with no distributed overhead",
+        description="Single-node 5090 only; short prompt and short output, model fits in 32 GB",
         distributed=False,
         uses_ane=False,
         uses_tq4_1s=False,
@@ -75,52 +82,51 @@ POLICY_REGISTRY: dict[ExecutionPolicy, PolicyConfig] = {
     ),
     ExecutionPolicy.P1: PolicyConfig(
         policy=ExecutionPolicy.P1,
-        description="Distributed baseline with 5090 prefill and Mac decode",
+        description="EXO split (5090 prefill + Mac decode) over TCP/IP",
         distributed=True,
         uses_ane=False,
         uses_tq4_1s=False,
         uses_turbo_kv=False,
-        requires_rdma=True,
+        requires_distributed=True,
     ),
     ExecutionPolicy.P2: PolicyConfig(
         policy=ExecutionPolicy.P2,
-        description="Distributed baseline plus ANE speculative decode",
+        description="EXO split plus ANE speculative draft (decode bottleneck)",
         distributed=True,
         uses_ane=True,
         uses_tq4_1s=False,
         uses_turbo_kv=False,
-        requires_rdma=True,
+        requires_distributed=True,
         requires_ane=True,
     ),
     ExecutionPolicy.P3: PolicyConfig(
         policy=ExecutionPolicy.P3,
-        description="Distributed baseline plus TQ4_1S compressed weights",
+        description="EXO split plus TQ4_1S compressed weights (reduce cross-node transfer)",
         distributed=True,
         uses_ane=False,
         uses_tq4_1s=True,
         uses_turbo_kv=False,
-        requires_rdma=True,
+        requires_distributed=True,
         requires_tq4_1s=True,
     ),
     ExecutionPolicy.P4: PolicyConfig(
         policy=ExecutionPolicy.P4,
-        description="Distributed compressed run with turbo KV cache",
+        description="EXO split plus TriAttention KV compression (long context, >8K)",
         distributed=True,
         uses_ane=False,
-        uses_tq4_1s=True,
+        uses_tq4_1s=False,
         uses_turbo_kv=True,
-        requires_rdma=True,
-        requires_tq4_1s=True,
+        requires_distributed=True,
         requires_turbo_kv=True,
     ),
     ExecutionPolicy.P5: PolicyConfig(
         policy=ExecutionPolicy.P5,
-        description="Full-stack policy with RDMA, ANE, TQ4_1S, and turbo KV",
+        description="Full stack: EXO + ANE + TQ4_1S + TriAttention (maximum capability)",
         distributed=True,
         uses_ane=True,
         uses_tq4_1s=True,
         uses_turbo_kv=True,
-        requires_rdma=True,
+        requires_distributed=True,
         requires_ane=True,
         requires_tq4_1s=True,
         requires_turbo_kv=True,
@@ -129,14 +135,14 @@ POLICY_REGISTRY: dict[ExecutionPolicy, PolicyConfig] = {
         policy=ExecutionPolicy.P6,
         description=(
             "Flash-MoE slot-bank + EXO for MoE models exceeding node memory; "
-            "experts streamed from NVMe SSD (T6)"
+            "experts streamed from NVMe SSD (T5)"
         ),
         distributed=True,
         uses_ane=False,
         uses_tq4_1s=False,
         uses_turbo_kv=False,
         uses_flash_moe=True,
-        requires_rdma=True,
+        requires_distributed=True,
         requires_flash_moe=True,
     ),
 }

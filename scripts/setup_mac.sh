@@ -2,14 +2,15 @@
 set -euo pipefail
 
 # =============================================================================
-# CROSSFIRE v2 — Mac (Apple Silicon) Environment Setup
-# Installs EXO + llama.cpp + ANEMLL + Rustane with Metal/ANE support
+# CROSSFIRE-X — Mac (Apple Silicon) Environment Setup
+# Installs EXO + llama.cpp + ANEMLL + Rustane with Metal/ANE support.
+# Interconnect: TCP/IP over USB4 (primary) with 5GbE fallback (no RDMA).
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-echo "=== CROSSFIRE v2 Mac Setup ==="
+echo "=== CROSSFIRE-X Mac Setup ==="
 echo "Project root: $PROJECT_ROOT"
 
 # --- Check Apple Silicon ---
@@ -18,7 +19,7 @@ if [ "$ARCH" != "arm64" ]; then
     echo "WARNING: Expected Apple Silicon (arm64), got $ARCH"
 fi
 
-# --- Check macOS version (need 26.2+ for RDMA) ---
+# --- Check macOS version ---
 MACOS_VERSION="$(sw_vers -productVersion)"
 echo "macOS version: $MACOS_VERSION"
 
@@ -40,14 +41,17 @@ if [ "$CURRENT_LIMIT" != "58982" ]; then
     sudo sysctl iogpu.wired_limit_mb=58982
 fi
 
-# --- Check RDMA status ---
+# --- Thunderbolt IP bridge status ---
 echo ""
-echo "--- RDMA Status ---"
-if command -v rdma_ctl &>/dev/null; then
-    echo "RDMA tools available. Enable via Recovery mode: rdma_ctl enable"
-else
-    echo "WARNING: rdma_ctl not found. RDMA requires macOS Tahoe 26.2+."
-    echo "Enable via Recovery mode after upgrading."
+echo "--- Interconnect (Thunderbolt IP bridge + 5GbE) ---"
+# Thunderbolt IP presents as an en* interface once the cable is connected and
+# macOS negotiates the bridge. Surface its state to the user.
+if command -v networksetup &>/dev/null; then
+    echo "Network services:"
+    networksetup -listallnetworkservices | grep -i -E "thunderbolt|ethernet|usb" || true
+    echo ""
+    echo "If the Thunderbolt Bridge service is missing or inactive, create it under:"
+    echo "  System Settings -> Network -> ... -> Add Service -> Thunderbolt Bridge"
 fi
 
 # --- Install EXO ---
@@ -108,6 +112,29 @@ else
     echo "WARNING: Rust not installed. Install via: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
 fi
 
+# --- Interconnect probe ---
+echo ""
+echo "--- Interconnect probe ---"
+PC_HOST="${PC_HOST:-192.168.1.100}"
+PC_PORT="${PC_PORT:-8080}"
+if command -v iperf3 &>/dev/null; then
+    echo "iperf3 available. To measure throughput, run on the PC:"
+    echo "    iperf3 -s"
+    echo "Then on this Mac:"
+    echo "    iperf3 -c $PC_HOST -t 10 -P 4"
+    echo "Target: ~4-5 GB/s over USB4 (Thunderbolt IP bridge), ~600 MB/s over 5GbE."
+else
+    echo "iperf3 not installed. Install with: brew install iperf3"
+fi
+
+if command -v nc &>/dev/null; then
+    if nc -z -w 3 "$PC_HOST" "$PC_PORT" 2>/dev/null; then
+        echo "PC reachable on $PC_HOST:$PC_PORT."
+    else
+        echo "PC NOT reachable on $PC_HOST:$PC_PORT yet. Set PC_HOST to the correct address."
+    fi
+fi
+
 echo ""
 echo "=== Mac setup complete ==="
 echo "EXO:       $(command -v exo || echo 'install manually')"
@@ -118,6 +145,7 @@ echo ""
 echo "Next steps:"
 echo "  1. Download models to $PROJECT_ROOT/models/"
 echo "  2. Convert Qwen3.5-0.6B to ANE format via ANEMLL"
-echo "  3. Connect Thunderbolt 5 cable to PC"
-echo "  4. Enable RDMA: boot to Recovery mode -> rdma_ctl enable"
-echo "  5. Run: exo discover  (verify PC is visible)"
+echo "  3. Connect USB4 40 Gbps active cable to PC"
+echo "  4. Ensure Thunderbolt Bridge service is active in System Settings -> Network"
+echo "  5. Verify: iperf3 between nodes (see above)"
+echo "  6. Run: exo discover  (verify PC is visible)"
