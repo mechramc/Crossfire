@@ -36,8 +36,10 @@ make USB4 a viable consumer interconnect instead of treating TB5 RDMA as a prere
 | USB4 active cable | Thunderbolt IP bridge / TCP/IP | Primary EXO data path |
 | 5GbE Ethernet | Standard network stack | Discovery, control plane, fallback |
 
-Primary models: Qwen 3.5 27B (dense, primary), Qwen3.5-35B-A3B (MoE, P6 target),
-Qwen3.5 0.6B (ANE draft), Orion Forge (fused specialist MoE), Qwen 2.5 72B (stretch).
+Primary models (Gemma 4 family, Apache 2.0): Gemma 4 31B (dense, primary),
+Gemma 4 26B-A4B (MoE, P6 target), Gemma 4 E2B (ANE draft), Orion Forge
+(fused specialist MoE, secondary target). Stretch: Gemma 4 31B at 256K ctx
+(distributed + TriAttention).
 
 ## Tech Stack
 
@@ -88,7 +90,7 @@ ruff check .
 ruff format --check .
 
 # Run a benchmark (placeholder -- will be implemented)
-python -m benchmarks.perplexity --model models/qwen3.5-27b-tq4_1s.gguf
+python -m benchmarks.perplexity --model models/gemma-4-31b-tq4_1s.gguf
 ```
 
 ## Code Conventions

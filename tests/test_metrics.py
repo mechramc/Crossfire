@@ -5,7 +5,7 @@ from crossfire.utils.metrics import TABLE_HEADERS, BenchmarkResult
 
 def test_benchmark_result_to_row_complete():
     result = BenchmarkResult(
-        model="qwen3.5-27b",
+        model="gemma-4-31b",
         quant_type="TQ4_1S",
         context_size=8192,
         execution_policy="P5",
@@ -18,7 +18,7 @@ def test_benchmark_result_to_row_complete():
         kv_compression="triattention",
         distributed=True,
         ane_active=True,
-        ane_role="draft_0.6b",
+        ane_role="draft_e2b",
         acceptance_rate=0.72,
         total_power_watts=415.0,
         ane_power_watts=3.2,
@@ -29,12 +29,12 @@ def test_benchmark_result_to_row_complete():
     assert len(row) == len(TABLE_HEADERS)
     # Label comes from ablation_config when set (uppercase)
     assert row[0] == "C5"
-    assert row[1] == "qwen3.5-27b"
+    assert row[1] == "gemma-4-31b"
     assert row[4] == "6.42"
     assert row[5] == "35.7"
     assert row[6] == "245"
     assert row[7] == "0.310"
-    assert row[10] == "draft_0.6b"
+    assert row[10] == "draft_e2b"
     assert row[11] == "0.72"
     assert row[13] == "415"
 
@@ -42,7 +42,7 @@ def test_benchmark_result_to_row_complete():
 def test_benchmark_result_to_row_policy_label():
     """When no ablation_config is set, label comes from execution_policy."""
     result = BenchmarkResult(
-        model="qwen3.5-27b",
+        model="gemma-4-31b",
         quant_type="Q8_0",
         context_size=8192,
         execution_policy="P1",
@@ -56,7 +56,7 @@ def test_benchmark_result_to_row_policy_label():
 
 def test_benchmark_result_to_row_baseline():
     result = BenchmarkResult(
-        model="qwen3.5-27b",
+        model="gemma-4-31b",
         quant_type="Q8_0",
         context_size=8192,
         execution_policy="P0",
@@ -98,7 +98,7 @@ def test_benchmark_result_defaults():
 
 def test_flash_moe_result():
     result = BenchmarkResult(
-        model="qwen3.5-35b-a3b",
+        model="gemma-4-26b-a4b",
         quant_type="Q8_0",
         context_size=16384,
         execution_policy="P6",
@@ -118,7 +118,7 @@ def test_flash_moe_result():
 def test_interconnect_field():
     """interconnect and interconnect_bytes round-trip correctly."""
     result = BenchmarkResult(
-        model="qwen3.5-27b",
+        model="gemma-4-31b",
         quant_type="TQ4_1S",
         context_size=8192,
         execution_policy="P5",

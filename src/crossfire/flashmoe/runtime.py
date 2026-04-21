@@ -125,8 +125,10 @@ class FlashMoERuntime:
     def extract_sidecar(self, gguf_path: Path, output_dir: Path) -> SidecarConfig:
         """Extract per-specialist weights from a fused MoE GGUF into sidecar format.
 
-        For standard MoE GGUFs (Qwen3.5-35B, Kimi-K2.5): uses the
-        flashmoe_sidecar.py extract tool.
+        For standard MoE GGUFs (Gemma 4 26B-A4B, Kimi-K2.5): uses the
+        flashmoe_sidecar.py extract tool. Gemma's 128-expert + 1-shared-expert
+        layout may require extractor patches -- validate against the stock
+        extractor output before committing sidecar configs.
 
         For Orion Forge fused models: converts KALAVAI adapter weights
         into the Flash-MoE binary-per-specialist + manifest.json format.

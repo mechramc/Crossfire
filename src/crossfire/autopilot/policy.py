@@ -17,7 +17,7 @@ class ExecutionPolicy(Enum):
     """Execution policies available to AutoPilot.
 
     P0-P5 operate on dense models. P6 is the Flash-MoE slot-bank policy
-    for MoE models (Qwen3.5-35B-A3B, Orion Forge) that exceed node memory.
+    for MoE models (Gemma 4 26B-A4B, Orion Forge) that exceed node memory.
     """
 
     P0 = "p0"

@@ -5,6 +5,80 @@ Rule: update this file before every `git push`.
 
 ---
 
+## Session 16 - 2026-04-21: Model family migration to Gemma 4
+
+### What was done
+
+**Model family pivot (Qwen -> Gemma 4):**
+- All three core model slots switched from Qwen 3.5 / 3.6 to Gemma 4 (Apache 2.0):
+  - Dense primary: `Qwen 3.5 27B` -> `google/gemma-4-31B-it` (33B dense, 256K ctx)
+  - ANE draft: `Qwen3.5-0.6B` -> `google/gemma-4-E2B-it` (5.1B stored / 2.3B
+    effective via Per-Layer Embeddings, shares Gemma tokenizer with primary + MoE)
+  - MoE / P6: `Qwen3.5-35B-A3B` -> `google/gemma-4-26B-A4B-it` (25.2B / 3.8B
+    active, 128 experts with 8 routed + 1 shared, 256K ctx)
+- Stretch slot changed: Qwen 2.5 72B removed; replaced with Gemma 4 31B @ 256K
+  ctx (distributed + TriAttention) so the C6 ablation remains all-Gemma
+- Rationale: writeup leads with Gemma for Google-recruiter framing; mixed-family
+  references dilute that story. Qwen 3.6 also had gaps (no 3.6-27B dense, no
+  sub-1B draft), which Gemma 4 closes cleanly for two of three slots.
+
+**Files updated:**
+- `configs/models.yaml` -- full rewrite: Gemma 4 slot definitions with HF
+  repo IDs, tokenizer field, updated sizes (31B Q8_0 ~33 GB, 31B TQ4_1S
+  ~23 GB, 26B-A4B ~26 GB, E2B PLE architecture), Flash-MoE config for
+  128-expert / 8+1 topology, ablation matrix C0-C7 realigned per policy
+- `README.md` -- Models table + results matrix now list Gemma 4 IDs; P-policy
+  descriptions say "Draft E2B"
+- `CLAUDE.md` -- project overview and example benchmark command updated to
+  Gemma 4 (`gemma-4-31b-tq4_1s.gguf`); Apache 2.0 across the core slots
+- `tasks.md` -- T-0607/T-0608/T-0609/T-0612 rewritten with Gemma 4 HF repo
+  IDs and SCOUT-FIRST notes; T-0624 repurposed as long-ctx stretch; T-0625
+  gated on Gemma 4 26B-A4B instead of 35B-A3B
+- `scripts/setup_mac.sh` -- next-steps banner mentions Gemma 4 E2B ANE
+  conversion with the scout caveat
+- `scripts/run_experiment.sh` -- usage, ablation config table, and examples
+  updated for the Gemma 4 matrix; c2/c5/c6 now the ANE-requiring configs
+- `src/crossfire/autopilot/decision_tree.py` -- memory-threshold comment
+  now refers to Gemma 4 31B sizing, DecisionContext docstring mentions
+  Gemma 4 26B-A4B as the MoE example
+- `src/crossfire/autopilot/policy.py` -- docstring updated to Gemma 4 26B-A4B
+- `src/crossfire/autopilot/query_classifier.py` -- QueryFeatures docstring
+  updated
+- `src/crossfire/flashmoe/runtime.py` -- sidecar extraction docstring
+  flags Gemma's 128+1 topology as something the stock extractor was not
+  built for
+- `src/crossfire/utils/metrics.py` -- BenchmarkResult docstring example
+  identifiers updated
+- `tests/test_metrics.py` -- fixtures use `gemma-4-31b` / `gemma-4-26b-a4b`;
+  ANE role string now `draft_e2b`
+- `tests/test_flashmoe.py` -- generic model-path fixtures updated to
+  `/models/gemma.gguf` for consistency
+
+**Known unknowns flagged in status.md and memory/models_gemma4.md:**
+- ANE / CoreML conversion path for Gemma 4 E2B is unvalidated
+  (ANEMLL has no E2B benchmark; PLE may not round-trip through CoreML)
+- Flash-MoE sidecar extraction for Gemma 4 26B-A4B is unvalidated
+  (anemll-flash-llama.cpp sidecar extractor was built around Qwen / Kimi
+  topology, not 128-expert + 1-shared-expert)
+
+### Verification
+- `pytest`: 129 passed
+- `ruff check .`: clean (All checks passed!)
+- `ruff format --check .`: clean (40 files already formatted)
+- `grep -rn "[Qq]wen"` shows only historical references (Session 16
+  checkpoint entry describing the pivot, explanatory notes about what
+  the Flash-MoE extractor was built for, the TriAttention paper's
+  validation set, and the archived pre-migration spec doc)
+
+### State at end of session
+- Repo is fully Gemma 4 across docs, configs, scripts, code, and tests
+- Stretch slot reframed as long-ctx Gemma 4 31B (no Qwen references remain
+  in the public-facing matrix)
+- Ready to begin T-0607/T-0608/T-0612 downloads; T-0609 and T-0612 need
+  scout runs before full calibration
+
+---
+
 ## Session 15 - 2026-04-21: Phase 6 PC bring-up (T-0601) and CRLF shell-script fix
 
 ### What was done

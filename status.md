@@ -2,8 +2,8 @@
 
 Last updated: 2026-04-21
 Branch: main
-Latest commit: 8872d62 (chore: force LF line endings for shell scripts)
-Tracker state: software-layer tasks closed; Phase 6 hardware bring-up in progress. T-0601 (PC) and T-0602 (Mac) done; EXO nodes discovering each other over WiFi. USB4 tasks T-0603/T-0604/T-0605 deferred until cable is acquired.
+Latest commit: (Session 16 Gemma pivot pending push)
+Tracker state: software-layer tasks closed; Phase 6 hardware bring-up in progress. T-0601 (PC) and T-0602 (Mac) done; EXO nodes discovering each other over WiFi. USB4 tasks T-0603/T-0604/T-0605 deferred until cable is acquired. Model family switched from Qwen to Gemma 4 (see Session 16 checkpoint entry).
 
 ## Summary
 
@@ -64,14 +64,28 @@ the repo root is `crossfire_x_final.docx`; the prior unified spec is archived.
 
 ## Immediate Next Work
 
-Phase 6 (Hardware Bring-Up And Calibration):
-1. Download 27B / 0.6B / 35B-A3B models to both nodes (T-0607, T-0608, T-0612)
-2. Convert 0.6B draft to ANE CoreML (T-0609); build Rustane (T-0610); build
-   anemll-flash-llama.cpp with CUDA on PC and Metal on Mac (T-0611)
-3. Record P0 single-node baselines on PC and Mac (T-0613, T-0614)
+Phase 6 (Hardware Bring-Up And Calibration), Gemma 4 family:
+1. Download Gemma 4 31B / E2B / 26B-A4B to both nodes (T-0607, T-0608, T-0612).
+   SCOUT FIRST for T-0609 (E2B ANE conversion) and T-0612 (26B-A4B Flash-MoE
+   sidecar extraction) -- both paths are unvalidated against Gemma 4 topology.
+2. Convert Gemma 4 E2B draft to ANE CoreML (T-0609); build Rustane (T-0610);
+   build anemll-flash-llama.cpp with CUDA on PC and Metal on Mac (T-0611)
+3. Record P0 single-node baselines on PC and Mac (T-0613, T-0614). Note:
+   Gemma 4 31B at Q8_0 (~33 GB) does not fit RTX 5090 single-node; PC P0
+   must run TQ4_1S (~23 GB) or skip to distributed.
 4. Record P1 distributed baseline over WiFi at 8K/16K/32K (T-0617)
 5. Lock reward normalization constants from P1 baseline (T-0618)
 6. Policy calibrations P2-P6 (T-0619 through T-0625) -> C0-C7 matrix (T-0626)
+   with C6 now Gemma 4 31B @ 256K ctx (was Qwen 2.5 72B).
+
+## Known unknowns to resolve during Phase 6
+
+- **ANE conversion path for Gemma 4 E2B.** ANEMLL has no E2B benchmark;
+  PLE architecture may not round-trip through CoreML cleanly. T-0609 must
+  scout before committing to the 50 tok/s draft target.
+- **Flash-MoE sidecar extraction for Gemma 4 26B-A4B.** anemll-flash-llama.cpp
+  was built around Qwen / Kimi topology. Gemma's 128-expert + 1-shared-expert
+  layout may need extractor patches. T-0612 scout before full calibration.
 
 Deferred (hardware):
 - USB4 40 Gbps cable + Thunderbolt IP bridge + throughput baseline (T-0603/T-0604/T-0605).

@@ -16,7 +16,7 @@ class BenchmarkResult:
     """Results from a single benchmark run.
 
     Attributes:
-        model: Model identifier (e.g. "qwen3.5-27b", "qwen3.5-35b-a3b").
+        model: Model identifier (e.g. "gemma-4-31b", "gemma-4-26b-a4b").
         quant_type: Weight quantization type ("Q8_0", "TQ4_1S", etc.).
         context_size: Context window size in tokens.
         execution_policy: AutoPilot policy used (P0-P6). Default "P0".

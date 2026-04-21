@@ -44,7 +44,7 @@ Rule: Only mark a task done when the code, file, or artifact exists in this repo
 - [x] T-0116 Add `AutoPilotEngine` enum and configurable engine selection to `autopilot.py`
 - [x] T-0117 Add `model_is_moe` field to `QueryFeatures`
 - [x] T-0118 Create `configs/autopilot.yaml`
-- [x] T-0119 Update `configs/models.yaml` (qwen3.5-35b-a3b, C0-C7 ablation matrix)
+- [x] T-0119 Update `configs/models.yaml` (MoE model + C0-C7 ablation matrix; model family migrated to Gemma 4 in Session 16)
 - [x] T-0120 Update `configs/hardware.yaml` (T6 NVMe SSD, Flash-MoE build flags)
 - [x] T-0121 Update pipeline tests for T6 and P6
 - [x] T-0122 Update metrics tests for policy-native schema and P6 fields
@@ -121,12 +121,12 @@ Rule: Only mark a task done when the code, file, or artifact exists in this repo
 - [!] T-0604 Configure Thunderbolt IP bridge / TCP-IP networking between nodes
 - [!] T-0605 Measure USB4 throughput between nodes and record baseline
 - [!] T-0606 Validate 5GbE fallback link and discovery path
-- [!] T-0607 Download primary 27B model artifacts (Q8_0 + TQ4_1S)
-- [!] T-0608 Download Qwen3.5-0.6B draft model artifacts
-- [!] T-0609 Convert 0.6B draft model into ANE-ready CoreML format
+- [!] T-0607 Download Gemma 4 31B (`google/gemma-4-31B-it`) model artifacts (Q8_0 + TQ4_1S)
+- [!] T-0608 Download Gemma 4 E2B (`google/gemma-4-E2B-it`) draft model artifacts
+- [!] T-0609 Convert Gemma 4 E2B draft into ANE-ready CoreML format (SCOUT FIRST: ANEMLL has no published E2B benchmark; PLE architecture may not round-trip through CoreML cleanly)
 - [!] T-0610 Build Rustane
 - [!] T-0611 Build anemll-flash-llama.cpp with Metal flags (Mac) and CUDA flags (PC)
-- [!] T-0612 Download Qwen3.5-35B-A3B (MoE) and run Flash-MoE sidecar extraction
+- [!] T-0612 Download Gemma 4 26B-A4B (`google/gemma-4-26B-A4B-it`) and run Flash-MoE sidecar extraction (SCOUT FIRST: 128-expert + 1-shared-expert topology is not what the extractor was built for)
 - [!] T-0613 Record P0 single-node PC baseline (C0 reference)
 - [!] T-0614 Record P0 single-node Mac baseline (C0 reference)
 - [!] T-0615 Record baseline perplexity runs (wikitext-2-raw-v1, 20 chunks, c=512)
@@ -138,8 +138,8 @@ Rule: Only mark a task done when the code, file, or artifact exists in this repo
 - [!] T-0621 Run P3 cross-node compression calibration (C3/C4 prework)
 - [!] T-0622 Run P4 TriAttention KV calibration (C4)
 - [!] T-0623 Run P5 full-stack calibration (C5)
-- [!] T-0624 Run P6 Flash-MoE slot-bank calibration with 35B-A3B (C6)
-- [!] T-0625 Run P6 Flash-MoE single-node slot-bank calibration (C7)
+- [!] T-0624 Run long-context stretch calibration (C6) -- Gemma 4 31B at 256K ctx, distributed + TriAttention
+- [!] T-0625 Run P6 Flash-MoE single-node slot-bank calibration with Gemma 4 26B-A4B (C7)
 - [!] T-0626 Compile C0-C7 ablation matrix artifact under `results/`
 
 ## Phase 7 - Orion Forge Serving

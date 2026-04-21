@@ -140,7 +140,7 @@ def _stock_runtime() -> FlashMoERuntime:
 def test_cli_args_include_required_flags():
     """build_cli_args always includes -ub 1 -ngl 99 -fa on."""
     rt = _stock_runtime()
-    args = rt.build_cli_args(Path("/models/qwen.gguf"))
+    args = rt.build_cli_args(Path("/models/gemma.gguf"))
     assert "-ub" in args
     assert "-ngl" in args
     assert "-fa" in args
@@ -154,7 +154,7 @@ def test_cli_args_include_mode_and_topk():
         mode=FlashMoEMode.RESIDENT_BANK,
         slot_bank=SlotBankConfig(topk=5),
     )
-    args = rt.build_cli_args(Path("/models/qwen.gguf"))
+    args = rt.build_cli_args(Path("/models/gemma.gguf"))
     assert "--moe-mode=resident-bank" in args
     assert "--moe-topk=5" in args
 
@@ -162,7 +162,7 @@ def test_cli_args_include_mode_and_topk():
 def test_cli_args_context_size_passthrough():
     """--ctx-size reflects the caller's requested context window."""
     rt = _stock_runtime()
-    args = rt.build_cli_args(Path("/models/qwen.gguf"), context_size=16384)
+    args = rt.build_cli_args(Path("/models/gemma.gguf"), context_size=16384)
     assert "--ctx-size" in args
     assert "16384" in args
 
@@ -177,7 +177,7 @@ def test_cli_args_slot_bank_adds_streaming_flags():
         sidecar=sidecar,
         slot_bank=slot_bank,
     )
-    args = rt.build_cli_args(Path("/models/qwen.gguf"))
+    args = rt.build_cli_args(Path("/models/gemma.gguf"))
     assert "--moe-slot-bank" in args
     assert "128" in args
     assert "--moe-prefetch-temporal" in args
@@ -194,7 +194,7 @@ def test_cli_args_slot_bank_trace_path_optional():
         sidecar=sidecar,
         slot_bank=SlotBankConfig(trace_path=None),
     )
-    assert "--moe-trace" not in no_trace.build_cli_args(Path("/models/qwen.gguf"))
+    assert "--moe-trace" not in no_trace.build_cli_args(Path("/models/gemma.gguf"))
 
     with_trace = FlashMoERuntime(
         binary_path=Path("/opt/llama-cli"),
@@ -202,7 +202,7 @@ def test_cli_args_slot_bank_trace_path_optional():
         sidecar=sidecar,
         slot_bank=SlotBankConfig(trace_path=Path("/tmp/trace.jsonl")),
     )
-    args = with_trace.build_cli_args(Path("/models/qwen.gguf"))
+    args = with_trace.build_cli_args(Path("/models/gemma.gguf"))
     assert "--moe-trace" in args
     assert "/tmp/trace.jsonl" in args or str(Path("/tmp/trace.jsonl")) in args
 
@@ -210,7 +210,7 @@ def test_cli_args_slot_bank_trace_path_optional():
 def test_cli_args_stock_mode_omits_slot_bank_flags():
     """STOCK mode does not emit --moe-slot-bank or prefetch flags."""
     rt = _stock_runtime()
-    args = rt.build_cli_args(Path("/models/qwen.gguf"))
+    args = rt.build_cli_args(Path("/models/gemma.gguf"))
     assert "--moe-slot-bank" not in args
     assert "--moe-prefetch-temporal" not in args
 
@@ -222,11 +222,11 @@ def test_run_inference_raises_not_implemented():
     """Inference is gated until anemll-flash-llama.cpp is built."""
     rt = _stock_runtime()
     with pytest.raises(NotImplementedError, match=r"anemll-flash-llama\.cpp"):
-        rt.run_inference(Path("/models/qwen.gguf"), prompt="hello")
+        rt.run_inference(Path("/models/gemma.gguf"), prompt="hello")
 
 
 def test_extract_sidecar_raises_not_implemented():
     """Sidecar extraction is gated until tools are built."""
     rt = _stock_runtime()
     with pytest.raises(NotImplementedError, match="Sidecar extraction"):
-        rt.extract_sidecar(Path("/models/qwen.gguf"), Path("/tmp/out"))
+        rt.extract_sidecar(Path("/models/gemma.gguf"), Path("/tmp/out"))

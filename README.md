@@ -52,13 +52,17 @@ enough for the target workload.
 
 ## Models
 
+The target family is **Gemma 4** (Apache 2.0) — dense primary, ANE draft, and
+Flash-MoE all draw from the same tokenizer family for coherent speculative
+decode pairing.
+
 | Model | Parameters | Use Case |
 |-------|-----------|----------|
-| Qwen 3.5 27B | 27B dense | Primary benchmark target |
-| Qwen 3.5 0.6B | 0.6B dense | ANE draft model (speculative decode, T3) |
-| Qwen 3.5 35B-A3B | 35B MoE (3B active) | Flash-MoE slot-bank target (P6) |
-| Orion Forge | MoE fused specialist | Primary Flash-MoE + EXO serving target |
-| Qwen 2.5 72B | 72B dense | Stretch goal (distributed, TQ4_1S) |
+| Gemma 4 31B | 33B dense | Primary benchmark target |
+| Gemma 4 E2B | 5.1B stored / 2.3B effective (PLE) | ANE draft model (speculative decode, T3) |
+| Gemma 4 26B-A4B | 25.2B total / 3.8B active, 128 experts | Flash-MoE slot-bank target (P6) |
+| Orion Forge | MoE fused specialist | Secondary Flash-MoE + EXO serving target |
+| Gemma 4 31B @ 256K ctx | Same weights, long-context | Stretch / impossible-scenario (distributed + TriAttention) |
 
 ## Execution Policies (P0-P6)
 
@@ -69,10 +73,10 @@ AutoPilot selects the appropriate policy at runtime using a deterministic decisi
 |--------|----------|-----|-------------|---------|----------|
 | P0 | Single best node | Idle | None | FP16/Q8 | Fallback, no distributed overhead |
 | P1 | EXO over USB4 (5090 prefill + Mac decode) | Idle | None | FP16/Q8 | Distributed baseline |
-| P2 | EXO over USB4 | Draft 0.6B | None | FP16/Q8 | Speculative decode via ANE |
+| P2 | EXO over USB4 | Draft E2B | None | FP16/Q8 | Speculative decode via ANE |
 | P3 | EXO over USB4 | Idle | None | TQ4_1S | Reduce cross-node transfer cost |
 | P4 | EXO over USB4 | Idle | TriAttention | TQ4_1S | Long-context, compressed KV path |
-| P5 | EXO over USB4 | Draft 0.6B | TriAttention | TQ4_1S | Full-stack stacked compression |
+| P5 | EXO over USB4 | Draft E2B | TriAttention | TQ4_1S | Full-stack stacked compression |
 | P6 | EXO over USB4 | Idle | TriAttention | Flash-MoE | MoE models exceeding node memory |
 
 ## Project Structure
@@ -145,11 +149,11 @@ Controlled offline benchmarking configs that isolate each component's contributi
 
 | Policy | Model | Quant | PPL | tok/s | TTFT (ms) | tok/W | MoE Hit% | Power (W) |
 |--------|-------|-------|-----|-------|-----------|-------|----------|-----------|
-| P0 | qwen3.5-27b | Q8_0 | -- | -- | -- | -- | -- | -- |
-| P1 | qwen3.5-27b | Q8_0 | -- | -- | -- | -- | -- | -- |
-| P2 | qwen3.5-27b | Q8_0 | -- | -- | -- | -- | -- | -- |
-| P5 | qwen3.5-27b | TQ4_1S | -- | -- | -- | -- | -- | -- |
-| P6 | qwen3.5-35b-a3b | Flash-MoE | -- | -- | -- | -- | -- | -- |
+| P0 | gemma-4-31b | Q8_0 | -- | -- | -- | -- | -- | -- |
+| P1 | gemma-4-31b | Q8_0 | -- | -- | -- | -- | -- | -- |
+| P2 | gemma-4-31b | Q8_0 | -- | -- | -- | -- | -- | -- |
+| P5 | gemma-4-31b | TQ4_1S | -- | -- | -- | -- | -- | -- |
+| P6 | gemma-4-26b-a4b | Flash-MoE | -- | -- | -- | -- | -- | -- |
 
 ## Key Dependencies
 

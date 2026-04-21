@@ -21,8 +21,8 @@ SHORT_TOKEN_THRESHOLD: int = 512
 LONG_CONTEXT_THRESHOLD: int = 8192
 
 # Model size requiring weight compression to fit in node VRAM (GB)
-# RTX 5090 has 32 GB; TQ4_1S Qwen3.5-27B is ~19 GB, so 27B is fine.
-# Qwen 2.5 72B at Q8_0 is ~72 GB -- exceeds the 5090, needs TQ4_1S.
+# RTX 5090 has 32 GB; Gemma 4 31B at Q8_0 is ~33 GB -- needs TQ4_1S (~23 GB)
+# to fit single-node, or distributed split to span nodes.
 MEMORY_THRESHOLD_GB: float = 32.0
 
 # Node memory for MoE slot-bank decision (Mac Studio unified memory)
@@ -74,7 +74,7 @@ class DecisionContext:
         context_len: Total context window currently in use (tokens).
         model_size_gb: Model size in GB (as loaded -- Q8_0 or TQ4_1S).
         model_is_moe: True if the model is a Mixture-of-Experts architecture
-            (e.g., Qwen3.5-35B-A3B). Triggers P6 / Flash-MoE routing.
+            (e.g., Gemma 4 26B-A4B). Triggers P6 / Flash-MoE routing.
         decode_is_bottleneck: True if decode throughput (not prefill) is
             the limiting factor for this request class. Enables P2 (ANE
             speculative draft).

@@ -32,7 +32,7 @@ class QueryFeatures:
     model_size_b: float
     available_vram_mb: float
     concurrent_requests: int
-    model_is_moe: bool = False  # True for MoE models (Qwen3.5-35B-A3B, Orion Forge)
+    model_is_moe: bool = False  # True for MoE models (Gemma 4 26B-A4B, Orion Forge)
 
     def __post_init__(self) -> None:
         """Validate feature values are physically meaningful."""

@@ -1,98 +1,110 @@
-# Model definitions for CROSSFIRE-X experiments
-# Paths are relative to the models/ directory (gitignored)
+# Model definitions for CROSSFIRE-X experiments.
+# All model paths are relative to the models/ directory (gitignored).
+#
+# The target family is Gemma 4 (Apache 2.0). Three core slots — dense primary,
+# ANE draft, and Flash-MoE — plus a long-context stretch reuse the same dense
+# weights at 256K ctx to keep the matrix all-Gemma.
 
 models:
-  # ── Dense models ─────────────────────────────────────────────────────────
-  qwen3.5-27b:
-    name: "Qwen 3.5 27B"
-    parameters: 27B
+  # ── Dense primary ────────────────────────────────────────────────────────
+  gemma-4-31b:
+    name: "Gemma 4 31B"
+    hf_repo: "google/gemma-4-31B-it"
+    parameters: 33B
     architecture: dense
-    role: primary_dense  # Non-MoE experiments (C0, C2, C4, C5)
+    role: primary_dense  # Non-MoE experiments (C0, C2, C4, C5) and long-ctx stretch (C6)
+    tokenizer: gemma  # 262K vocab, shared across gemma-4-{E2B,26B-A4B,31B}
+    native_context: 262144
     variants:
       q8_0:
-        file: "qwen3.5-27b-q8_0.gguf"
-        size_gb: 26.6
+        file: "gemma-4-31b-q8_0.gguf"
+        size_gb: 33.0
       tq4_1s:
-        file: "qwen3.5-27b-tq4_1s.gguf"
-        size_gb: 19.1
+        file: "gemma-4-31b-tq4_1s.gguf"
+        size_gb: 23.1
         compress_from: q8_0  # TQ4_1S from Q8_0 only (not Q4_K_M)
     eval_contexts: [8192, 16384, 32768]
-    notes: "Fits both machines independently at Q8_0. Primary for P0–P5 experiments."
+    notes: >
+      Q8_0 (~33 GB) exceeds RTX 5090 32 GB VRAM -- distributed split required
+      for P0 single-node PC. TQ4_1S (~23 GB) fits PC alone. Gemma tokenizer is
+      shared with gemma-4-E2B, so speculative decode (P2/P5) uses a coherent
+      draft/primary pair.
 
-  qwen3.5-0.6b:
-    name: "Qwen 3.5 0.6B"
-    parameters: 0.6B
+  # ── ANE draft ────────────────────────────────────────────────────────────
+  gemma-4-e2b:
+    name: "Gemma 4 E2B"
+    hf_repo: "google/gemma-4-E2B-it"
+    parameters: "5.1B stored / 2.3B effective"
     architecture: dense
     role: ane_draft
-    source: "huggingface"  # HuggingFace weights → converted to ANE via ANEMLL
+    tokenizer: gemma  # same 262K vocab as primary + MoE
+    native_context: 131072
+    source: "huggingface"  # HuggingFace weights -> converted to ANE via ANEMLL
     ane_config:
       backend: anemll
       max_context: 2048
-      expected_tok_s: 50  # 47–62 tok/s per ANEMLL benchmarks
-    notes: "ANE draft model for speculative decode (T3). 2–5W power draw."
-
-  qwen2.5-72b:
-    name: "Qwen 2.5 72B"
-    parameters: 72B
-    architecture: dense
-    role: stretch_goal
-    variants:
-      q8_0:
-        file: "qwen2.5-72b-q8_0.gguf"
-        size_gb: 72.0
-      tq4_1s:
-        file: "qwen2.5-72b-tq4_1s.gguf"
-        size_gb: 45.8
-        compress_from: q8_0
-    eval_contexts: [8192, 16384]
+      # Target tok/s TBD: ANEMLL has no published E2B benchmark, and the
+      # Per-Layer Embeddings (PLE) architecture may not round-trip cleanly
+      # through CoreML. T-0609 must scout the conversion path before
+      # committing to a number.
+      expected_tok_s_target: 50
     notes: >
-      Requires distributed (P5) — fits neither machine alone at Q8_0.
-      TQ4_1S (~45.8 GB) still exceeds 5090 VRAM alone; needs EXO split.
-      This is the "impossible scenario" — only feasible with combined memory pool.
+      E "effective" parameters via PLE: 5.1B stored, 2.3B effective per layer.
+      Gemma 3n-lineage edge variant; Google markets it for on-device inference.
+      ANE conversion path is a known unknown -- see memory/models_gemma4.md.
 
-  # ── MoE models ────────────────────────────────────────────────────────────
-  qwen3.5-35b-a3b:
-    name: "Qwen 3.5 35B-A3B"
-    parameters: 35B total / 3B active
+  # ── MoE / P6 Flash-MoE ───────────────────────────────────────────────────
+  gemma-4-26b-a4b:
+    name: "Gemma 4 26B-A4B"
+    hf_repo: "google/gemma-4-26B-A4B-it"
+    parameters: "25.2B total / 3.8B active"
     architecture: moe
-    role: primary_moe  # Flash-MoE experiments (C1, C3, C5, C6)
+    role: primary_moe  # Flash-MoE experiments (C1, C3, C5, C7)
+    tokenizer: gemma
+    native_context: 262144
     variants:
       gguf:
-        file: "qwen3.5-35b-a3b-q8_0.gguf"
-        size_gb: ~34.4
+        file: "gemma-4-26b-a4b-q8_0.gguf"
+        size_gb: 26.0
     flash_moe_config:
-      experts_total: 64        # total specialist count in the model
-      topk: 8                  # activated experts per token
-      slot_bank_slots: 64      # recommended slot-bank size
-      mode_stock: true         # all experts fit in 64 GB unified memory
-      mode_slot_bank: false    # optional for larger pools
+      experts_total: 128         # total specialist count in the model
+      topk_routed: 8             # activated routed experts per token
+      shared_experts: 1          # always-on shared expert per layer
+      slot_bank_slots: 128       # one slot per specialist for max hit rate
+      mode_stock: true           # all experts fit in 64 GB unified memory
+      mode_slot_bank: false      # optional for larger pools / stress tests
     eval_contexts: [8192, 16384, 32768]
     notes: >
-      Primary Flash-MoE test model. Sidecar extraction required before slot-bank mode.
-      All experts (~20 active specialists equivalent) fit resident on Mac Studio 64 GB.
-      Use --moe-mode stock for Phase 2 baseline; slot-bank for scaling experiments.
+      Gemma 4 26B-A4B uses 128 experts with 8 routed + 1 shared per token.
+      Sidecar extraction for this topology is unvalidated in
+      anemll-flash-llama.cpp (which was built around Qwen / Kimi layouts);
+      T-0612 may need extractor patches. All experts fit resident on
+      Mac Studio 64 GB in stock mode; slot-bank mode retained for scaling.
+      Ships with ~550M vision encoder baked in (harmless for text workloads).
 
 # ── Evaluation dataset ───────────────────────────────────────────────────────
 eval_dataset: "wikitext-2-raw-v1"
 eval_chunks: 20
 eval_chunk_tokens: 512
 
-# ── Ablation matrix (C0–C7) ──────────────────────────────────────────────────
+# ── Ablation matrix (C0-C7) ──────────────────────────────────────────────────
 # Tests each component in isolation to measure its independent contribution.
 # C0 = floor (pure EXO), C5 = headline (full stack).
-# Note: AutoPilot uses execution policies P0–P6 at runtime;
+# Note: AutoPilot uses execution policies P0-P6 at runtime;
 # the ablation matrix is used for controlled offline benchmarking.
 ablation:
   c0:
     pipeline: "exo"
-    llama_runtime: "stock"         # vanilla llama.cpp
+    model: "gemma-4-31b"
+    llama_runtime: "stock"                # vanilla llama.cpp (TurboQuant+ fork)
     ane: "idle"
     triattention: false
     tq_plus: false
-    description: "Pure EXO baseline — floor for all comparisons"
+    description: "Pure EXO baseline -- floor for all comparisons"
 
   c1:
     pipeline: "exo"
+    model: "gemma-4-26b-a4b"
     llama_runtime: "flash_moe_slot_bank"  # anemll-flash-llama.cpp
     ane: "idle"
     triattention: false
@@ -101,14 +113,16 @@ ablation:
 
   c2:
     pipeline: "exo"
+    model: "gemma-4-31b"
     llama_runtime: "stock"
-    ane: "draft_0.6b"
+    ane: "draft_e2b"
     triattention: false
     tq_plus: false
-    description: "ANE speculative decode value add"
+    description: "ANE speculative decode value add (Gemma 4 E2B draft)"
 
   c3:
     pipeline: "exo"
+    model: "gemma-4-26b-a4b"
     llama_runtime: "flash_moe_slot_bank"
     ane: "idle"
     triattention: true
@@ -117,7 +131,8 @@ ablation:
 
   c4:
     pipeline: "exo"
-    llama_runtime: "flash_moe_slot_bank"
+    model: "gemma-4-31b"
+    llama_runtime: "stock"
     ane: "idle"
     triattention: false
     tq_plus: true
@@ -125,24 +140,31 @@ ablation:
 
   c5:
     pipeline: "exo"
+    model: "gemma-4-26b-a4b"
     llama_runtime: "flash_moe_slot_bank"
-    ane: "draft_0.6b"
+    ane: "draft_e2b"
     triattention: true
     tq_plus: true
-    description: "Full stack — EXO + Flash-MoE + ANE + TriAttention + TQ4_1S (headline)"
+    description: "Full stack -- EXO + Flash-MoE + ANE + TriAttention + TQ4_1S (headline)"
 
   c6:
-    pipeline: "exo_72b"
-    llama_runtime: "flash_moe_slot_bank"
-    ane: "draft_0.6b"
+    pipeline: "exo"
+    model: "gemma-4-31b"
+    llama_runtime: "stock"
+    ane: "draft_e2b"
     triattention: true
     tq_plus: true
-    description: "72B stretch goal — full stack on Qwen 2.5 72B"
+    context_override: 262144
+    description: >
+      Long-context stretch -- Gemma 4 31B at 256K context, distributed with
+      TriAttention KV compression. The impossible-scenario slot (replaces
+      the prior Qwen 2.5 72B stretch to keep the matrix all-Gemma).
 
   c7:
     pipeline: "mac_only"
+    model: "gemma-4-26b-a4b"
     llama_runtime: "flash_moe_slot_bank"
     ane: "prefill"
     triattention: true
     tq_plus: false
-    description: "Mac-only disaggregated — ANE prefill + Metal decode"
+    description: "Mac-only disaggregated -- ANE prefill + Metal decode + Flash-MoE"
