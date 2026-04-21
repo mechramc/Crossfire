@@ -20,7 +20,11 @@ from dataclasses import dataclass
 from enum import Enum
 
 from crossfire.autopilot.bandit import ThompsonBandit, UCB1Bandit
-from crossfire.autopilot.decision_tree import DecisionContext
+from crossfire.autopilot.decision_tree import (
+    DEFAULT_DECISION_TREE_THRESHOLDS,
+    DecisionContext,
+    DecisionTreeThresholds,
+)
 from crossfire.autopilot.decision_tree import select_policy as dt_select
 from crossfire.autopilot.logger import DecisionLogger, DecisionRecord
 from crossfire.autopilot.policy import (
@@ -134,6 +138,7 @@ class AutoPilot:
         config: AutoPilotConfig = DEFAULT_AUTOPILOT_CONFIG,
         reward_weights: RewardWeights = DEFAULT_REWARD_WEIGHTS,
         decision_logger: DecisionLogger | None = None,
+        decision_tree_thresholds: DecisionTreeThresholds = DEFAULT_DECISION_TREE_THRESHOLDS,
     ) -> None:
         """Initialize AutoPilot state for all query classes."""
 
@@ -142,6 +147,7 @@ class AutoPilot:
         self.config = config
         self.reward_weights = reward_weights
         self.decision_logger = decision_logger
+        self.decision_tree_thresholds = decision_tree_thresholds
         self._bandits = {query_class: self._make_bandit() for query_class in QueryClass}
 
     def select_policy(self, features: QueryFeatures) -> AutoPilotSelection:
@@ -179,8 +185,9 @@ class AutoPilot:
             model_size_gb=features.model_size_b * 2.0,  # rough Q8_0 GB estimate
             model_is_moe=features.model_is_moe,
             decode_is_bottleneck=False,  # heuristic: true for long-gen classes
+            node_memory_gb=self.decision_tree_thresholds.node_memory_gb,
         )
-        selected_policy = dt_select(ctx)
+        selected_policy = dt_select(ctx, thresholds=self.decision_tree_thresholds)
 
         # Clamp to available policies (hardware may not support all)
         if selected_policy not in policies:

@@ -30,6 +30,37 @@ NODE_MEMORY_GB: float = 64.0
 
 
 @dataclass(frozen=True)
+class DecisionTreeThresholds:
+    """Tunable thresholds for the deterministic decision-tree selector.
+
+    Defaults come from the unified spec constants above. Callers may override
+    them (typically via `configs/autopilot.yaml`) after Phase 2 calibration.
+    """
+
+    short_token_threshold: int = SHORT_TOKEN_THRESHOLD
+    long_context_threshold: int = LONG_CONTEXT_THRESHOLD
+    memory_threshold_gb: float = MEMORY_THRESHOLD_GB
+    node_memory_gb: float = NODE_MEMORY_GB
+
+    def __post_init__(self) -> None:
+        if self.short_token_threshold <= 0:
+            msg = "short_token_threshold must be positive"
+            raise ValueError(msg)
+        if self.long_context_threshold <= 0:
+            msg = "long_context_threshold must be positive"
+            raise ValueError(msg)
+        if self.memory_threshold_gb <= 0:
+            msg = "memory_threshold_gb must be positive"
+            raise ValueError(msg)
+        if self.node_memory_gb <= 0:
+            msg = "node_memory_gb must be positive"
+            raise ValueError(msg)
+
+
+DEFAULT_DECISION_TREE_THRESHOLDS = DecisionTreeThresholds()
+
+
+@dataclass(frozen=True)
 class DecisionContext:
     """Request context used by the decision-tree policy selector.
 
@@ -77,7 +108,11 @@ class DecisionContext:
             raise ValueError(msg)
 
 
-def select_policy(ctx: DecisionContext) -> ExecutionPolicy:
+def select_policy(
+    ctx: DecisionContext,
+    *,
+    thresholds: DecisionTreeThresholds = DEFAULT_DECISION_TREE_THRESHOLDS,
+) -> ExecutionPolicy:
     """Select the execution policy for a single request.
 
     Implements the decision tree from the CROSSFIRE-X unified spec
@@ -92,6 +127,8 @@ def select_policy(ctx: DecisionContext) -> ExecutionPolicy:
 
     Args:
         ctx: The request context with prompt, model, and hardware state.
+        thresholds: Tunable decision-tree thresholds (defaults to unified
+            spec constants). Override via `configs/autopilot.yaml`.
 
     Returns:
         The selected ExecutionPolicy for this request.
@@ -101,15 +138,18 @@ def select_policy(ctx: DecisionContext) -> ExecutionPolicy:
         return ExecutionPolicy.P6
 
     # P1: Cheap request -- overhead of full stack outweighs benefit
-    if ctx.prompt_len < SHORT_TOKEN_THRESHOLD and ctx.output_len < SHORT_TOKEN_THRESHOLD:
+    if (
+        ctx.prompt_len < thresholds.short_token_threshold
+        and ctx.output_len < thresholds.short_token_threshold
+    ):
         return ExecutionPolicy.P1
 
     # P4: Long context -- KV cache growth needs TriAttention compression
-    if ctx.context_len > LONG_CONTEXT_THRESHOLD:
+    if ctx.context_len > thresholds.long_context_threshold:
         return ExecutionPolicy.P4
 
     # P3: Model too large for node VRAM without weight compression
-    if ctx.model_size_gb > MEMORY_THRESHOLD_GB:
+    if ctx.model_size_gb > thresholds.memory_threshold_gb:
         return ExecutionPolicy.P3
 
     # P2: Decode is the bottleneck -- ANE speculative draft helps
