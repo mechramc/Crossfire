@@ -1,7 +1,10 @@
 """Network communication between distributed inference nodes.
 
-Handles RDMA over Thunderbolt 5 (3us latency via EXO) and fallback
-TCP/IP connectivity checks between PC and Mac nodes.
+All supported interconnects run TCP/IP. USB4 (Thunderbolt IP bridge) is the
+performance target; 5GbE is the practical fallback and the link in use
+during development. RDMA is not supported in CROSSFIRE-X: composed
+TriAttention + TurboQuant compression (6.8x KV reduction) makes the
+USB4/5GbE bandwidth envelope sufficient, per crossfire_x_final.docx.
 """
 
 from __future__ import annotations
@@ -14,12 +17,30 @@ DEFAULT_TIMEOUT_SECONDS = 5
 
 
 class InterconnectType(Enum):
-    """Network interconnect type between nodes."""
+    """TCP/IP interconnect between CROSSFIRE-X nodes.
 
-    THUNDERBOLT_5_RDMA = "tb5_rdma"
-    THUNDERBOLT_4 = "tb4"
-    ETHERNET_10G = "10gbe"
+    All values are TCP/IP transports; they differ only in physical-link
+    bandwidth and latency. USB4 is the target for production; 5GbE is the
+    documented fallback; 1GbE and WiFi exist for bring-up and discovery.
+    """
+
+    USB4 = "usb4"
+    ETHERNET_5G = "5gbe"
     ETHERNET_1G = "1gbe"
+    WIFI = "wifi"
+
+
+# Expected latencies per interconnect (microseconds, TCP/IP round-trip)
+LATENCY_USB4_US = 300.0
+LATENCY_5GBE_US = 500.0
+LATENCY_1GBE_US = 600.0
+LATENCY_WIFI_US = 2000.0
+
+# Bandwidth per interconnect (Gbps, effective TCP/IP throughput)
+BANDWIDTH_USB4_GBPS = 40.0
+BANDWIDTH_5GBE_GBPS = 5.0
+BANDWIDTH_1GBE_GBPS = 1.0
+BANDWIDTH_WIFI_GBPS = 1.0  # WiFi 7 typical effective
 
 
 @dataclass(frozen=True)
@@ -29,23 +50,11 @@ class NetworkStats:
     latency_us: float
     bandwidth_gbps: float
     interconnect: InterconnectType
-    rdma_active: bool = False
 
     @property
     def latency_ms(self) -> float:
         """Latency in milliseconds."""
         return self.latency_us / 1000.0
-
-
-# Expected latencies per interconnect (microseconds)
-LATENCY_TB5_RDMA_US = 3.0
-LATENCY_TB4_TCP_US = 300.0
-LATENCY_10GBE_US = 100.0
-
-# Bandwidth per interconnect (Gbps)
-BANDWIDTH_TB5_GBPS = 80.0
-BANDWIDTH_TB4_GBPS = 40.0
-BANDWIDTH_10GBE_GBPS = 10.0
 
 
 def check_connectivity(host: str, port: int, timeout: float = DEFAULT_TIMEOUT_SECONDS) -> bool:
