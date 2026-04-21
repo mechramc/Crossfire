@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Shell scripts must use LF so WSL/Linux/macOS bash can execute them without
+# hitting "set: pipefail: invalid option name" from stray CR characters.
+*.sh text eol=lf
