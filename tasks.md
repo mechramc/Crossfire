@@ -122,7 +122,7 @@ Rule: Only mark a task done when the code, file, or artifact exists in this repo
 - [!] T-0605 Measure USB4 throughput between nodes and record baseline
 - [x] T-0606 Validate 5GbE fallback link and discovery path (Session 17; EXO on Mac and PC discovered each other over WiFi mDNS; PC node `12D3KooWLeMLzYwn...3cGM` elected master, Mac demoted to worker at 2026-04-21 15:01:12; observed on Mac dashboard at localhost:52415. 5GbE Ethernet path not tested — WiFi fallback is sufficient for current no-USB4 state)
 - [~] T-0607 Download Gemma 4 31B (`google/gemma-4-31B-it`) model artifacts (fp16 for Mac/MLX + TQ4_1S for PC llama.cpp). Subtasks split by node below
-- [~] T-0607.mac Mac: download fp16 safetensors to `models/gemma-4-31B-it/` (~60 GB) via `hf download google/gemma-4-31B-it --local-dir models/gemma-4-31B-it`. Consumed by MLX/EXO decode path (T2) and by Mac llama.cpp P0 baseline T-0614 after GGUF conversion. Session 18: started (background download running at `b3ykhqil3`)
+- [x] T-0607.mac Mac: download fp16 safetensors to `models/gemma-4-31B-it/` — DONE Session 18. `hf download google/gemma-4-31B-it` pulled 58 GB into `models/gemma-4-31B-it/` (2 safetensor shards + index.json + tokenizer + config + chat_template). Consumed by MLX/EXO decode path (T2); Mac P0 baseline T-0614 will convert this to GGUF via `vendor/llama.cpp/convert_hf_to_gguf.py` as part of T-0614 prep.
 - [ ] T-0607.pc PC (WSL2 Ubuntu): steps to run on PC node —
   1. Accept HF license for `google/gemma-4-31B-it` in browser
   2. `hf download google/gemma-4-31B-it --local-dir ~/crossfire-models/gemma-4-31B-it`
