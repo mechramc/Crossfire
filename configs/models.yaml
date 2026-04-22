@@ -41,13 +41,18 @@ models:
     native_context: 131072
     source: "huggingface"  # HuggingFace weights -> converted to ANE via ANEMLL
     ane_config:
-      backend: anemll
-      max_context: 2048
-      # Target tok/s TBD: ANEMLL has no published E2B benchmark, and the
-      # Per-Layer Embeddings (PLE) architecture may not round-trip cleanly
-      # through CoreML. T-0609 must scout the conversion path before
-      # committing to a number.
-      expected_tok_s_target: 50
+      backend: coreml_chunked  # Gemma4ChunkedEngine (T-0609a) — supersedes anemll
+      # Path to the pre-converted CoreML bundle
+      # (john-rocky/CoreML-LLM -> mlboydaisuke/gemma-4-E2B-coreml).
+      # Contains chunk1/2/3.mlmodelc + external embed/PLE/RoPE tables.
+      coreml_bundle_path: models/gemma-4-E2B-coreml
+      # Effective context is determined at load from the chunks' causal_mask
+      # input shape (observed 512 for the swa-2k variant). max_context here
+      # is informational.
+      max_context: 512
+      # Target tok/s: T-0609a smoke measured ~42 tok/s decode on M4 Max ANE
+      # at compute_units=cpu_and_ne. Session 17 monolith floor was 22.5.
+      expected_tok_s_target: 40
     notes: >
       E "effective" parameters via PLE: 5.1B stored, 2.3B effective per layer.
       Gemma 3n-lineage edge variant; Google markets it for on-device inference.

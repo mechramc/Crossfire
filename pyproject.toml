@@ -27,6 +27,11 @@ dev = [
     "pytest>=8.0",
     "ruff>=0.4",
 ]
+ane = [
+    "coremltools>=9.0",
+    "numpy>=1.26",
+    "tokenizers>=0.20",
+]
 
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]

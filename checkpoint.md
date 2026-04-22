@@ -5,6 +5,110 @@ Rule: update this file before every `git push`.
 
 ---
 
+## Session 18 - 2026-04-22: T-0609a Gemma 4 E2B chunked engine (Python port of ChunkedEngine.swift)
+
+### What was done
+
+**T-0609a closed (chunked CoreML inference for Gemma 4 E2B on M4 Max ANE):**
+
+Planned as a full port of `vendor/coreml-llm/Sources/CoreMLLLM/ChunkedEngine.swift`
+(2407 LOC, MIT). On inspecting the on-disk chunk `metadata.json` files, discovered
+the chunks are **stateful via Apple's MLState API**, not stateless with manual KV
+buffers as the Swift reference code (optimized for batched prefill + EAGLE-3) implied.
+Final Python implementation is ~400 LOC covering the correct-output text-decoding
+path end-to-end.
+
+- `src/crossfire/ane/gemma4_assets.py` — parses `model_config.json`; loads tokenizer
+  from `hf_model/tokenizer.json`; provides `QuantizedEmbedding` (mmap int8 +
+  per-row fp16 scale dequant for token embeddings AND per-layer embeddings);
+  loads `per_layer_projection.bin` (fp16 8960x1536), `per_layer_norm_weight.bin`
+  (fp32[256]), and `cos_sliding/sin_sliding/cos_full/sin_full.npy` RoPE tables
+- `src/crossfire/ane/gemma4_masks.py` — pure-numpy fp16 mask builders:
+  `causal_mask_full(position, ctx)`, `causal_mask_sliding(position, W)`, and
+  `update_mask(position, ctx)` — fp16 block fill is `-65504.0` (fp16 min), not
+  `-1e9` (overflows)
+- `src/crossfire/ane/gemma4_chunked.py` — `Gemma4ChunkedEngine` orchestration:
+  - `load(bundle_path, compute_units)` discovers `chunk*.mlmodelc` via glob,
+    reads each chunk's `metadata.json` to extract effective context from
+    `causal_mask` input shape (observed 512 for swa-2k variant, NOT the 2048
+    in `model_config.json.context_length`), loads each chunk with
+    `ct.models.CompiledMLModel` (Python 3.14 had no working native wheel;
+    `.venv` migrated to 3.13.12), calls `make_state()` per stateful chunk,
+    runs 4 dummy decode steps + `reset()` to prewarm ANE compile schedules
+  - `predict_step(token_id, position)` looks up embedding + PLE, builds
+    RoPE slice + masks, passes hidden_states sequentially through chunks;
+    stateful chunks get `state=` kwarg, chunk3 is stateless and consumes
+    `kv13_k/v` + `kv14_k/v` outputs emitted by chunk2 (shared KV across
+    layers 13-14 -> 15-24). Returns `token_id` int from chunk3's in-model argmax
+  - `run_prefill(token_ids)` loops `predict_step` (no batched-prefill models
+    used — Swift's `prefill_chunk*.mlmodelc` is deferred to T-0609a.1)
+  - `generate(prompt, max_tokens, stop_on_eos)` tokenizes with BOS prepended,
+    prefills with TTFT timer, decodes with decode tok/s timer, returns
+    `GenerationResult(text, prompt_tokens, generated_tokens, ttft_ms, decode_tok_s, total_tok_s)`
+- `scripts/run_gemma4_scout.py` — CLI that loads bundle, prints generation +
+  TTFT + tok/s. Replaces the throwaway `/tmp/crossfire_gemma4_scout.py`
+- `tests/test_gemma4_chunked.py` — 38 tests: config roundtrip, tokenizer, embed
+  dequant matches reference formula, RoPE/projection/norm loaders, mask builders
+  at boundary positions, chunk metadata parsing, compute-unit enum mapping, and
+  real-bundle end-to-end that loads the actual chunks and asserts "Paris" in the
+  generated text for prompt "The capital of France is"
+
+**Smoke run (M4 Max, `cpu_and_ne`):**
+- Prompt: "The capital of France is" (6 tokens incl. BOS)
+- Generated: " Paris.\n\n The capital" + drift after ~4 decode tokens
+- TTFT: 138.9 ms
+- Decode tok/s: 42.98 (beats Session 17 monolith floor of 22.5 by 1.9x and
+  iPhone 17 Pro's 31 tok/s)
+- Total tok/s: 44.51
+
+**Python 3.14 -> 3.13 venv migration:**
+
+During task 5 discovered coremltools 9.0 on Python 3.14 installs as a source-only
+wheel with no `libcoremlpython` / `libmilstoragepython` native extensions, so
+`MLModel(chunk.mlmodelc)` fails with "Unable to load libmodelpackage". PyPI shows
+native wheels for cp312 and cp313 only (`coremltools-9.0-cp313-none-macosx_11_0_arm64.whl`).
+Migrated `.venv` to `/opt/homebrew/bin/python3.13` (3.13.12). All 167 tests
+(129 pre-existing + 38 new) pass on the 3.13 venv.
+
+**Dependency additions (`pyproject.toml` `[project.optional-dependencies]`):**
+- `ane = ["coremltools>=9.0", "numpy>=1.26", "tokenizers>=0.20"]`
+- Justification per project CLAUDE.md: coremltools is the only supported Python
+  path to load `.mlmodelc` with ANE compute-unit selection; `tokenizers` (Rust
+  HF lib) consumes `hf_model/tokenizer.json`; numpy is unavoidable
+
+**Config update (`configs/models.yaml`):**
+- `gemma-4-e2b.ane_config.backend` renamed `anemll` -> `coreml_chunked`
+- Added `coreml_bundle_path: models/gemma-4-E2B-coreml`
+- `max_context: 2048` -> `512` (the effective value from chunk schemas)
+- `expected_tok_s_target: 50` -> `40` (based on observed 42.98)
+
+**Tracker updates:**
+- `tasks.md` — T-0609a marked done with session note; added T-0609a.1
+  (batched prefill), T-0609a.2 (prefix cache), T-0609a.3 (speculative/verify),
+  T-0609a.4 (multimodal), T-0609a.5 (top-k/p sampler) as follow-ups
+- `status.md` — Session 18 artifacts section, verification block, immediate
+  next work dropped T-0609a and added T-0609a.5 to later items, Known unknowns
+  resolved entry for chunked harness correctness
+- `checkpoint.md` — this entry
+
+### Verification
+- `pytest`: 167 passed (38 new gemma4 tests incl. real-bundle end-to-end)
+- `ruff check .`: clean
+- `ruff format --check .`: clean (45 files)
+- Scout CLI end-to-end: generates " Paris" + continuation, reports all three
+  timing metrics
+
+### State at end of session
+- T-0609a done; critical-path Gemma 4 E2B -> ANE inference is working
+- 38 new tests, no regressions in the 129 pre-existing tests
+- Project venv on Python 3.13.12 (from 3.14.3) — only reason: coremltools
+  native wheel support. No other code touched
+- Outstanding critical-path: T-0610 (Rustane), T-0611 (anemll-flash-llama.cpp),
+  T-0607 / T-0612 (31B + 26B-A4B downloads), P0-P6 calibration
+- T-0609a follow-ups (a.1-a.5) are quality/optimization, not correctness
+
+---
+
 ## Session 17 - 2026-04-21: T-0606 close and T-0609 Gemma 4 -> ANE scout
 
 ### What was done
