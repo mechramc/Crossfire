@@ -1,0 +1,49 @@
+{
+  "task_id": "T-0614",
+  "description": "Mac P0 single-node baseline (C0 reference) \u2014 Gemma 4 31B Q8_0 via llama.cpp Metal on M4 Max",
+  "timestamp_utc": "2026-04-22T16:29:27.346986+00:00",
+  "node": "mac",
+  "hardware": {
+    "chip": "M4 Max",
+    "unified_memory_gb": 64,
+    "wired_limit_mb": 58982
+  },
+  "execution_policy": "P0",
+  "ablation_config": "C0",
+  "backend": "llama.cpp (TheTom/llama-cpp-turboquant @ 4d24ad87b)",
+  "compute_target": "T2_metal_gpu",
+  "model": {
+    "name": "gemma-4-31B-it",
+    "path": "models/gemma-4-31B-Q8_0.gguf",
+    "format": "GGUF Q8_0",
+    "size_gb": 30.0,
+    "source": "hf:google/gemma-4-31B-it (fp16 safetensors) -> convert_hf_to_gguf.py --outtype q8_0"
+  },
+  "run_config": {
+    "prompt": "The capital of France is",
+    "n_predict": 128,
+    "n_gpu_layers": 99,
+    "ctx_size": 8192,
+    "temperature": 0.0,
+    "single_turn": true
+  },
+  "metrics": {
+    "prefill_tok_per_sec": 64.1,
+    "decode_tok_per_sec": 14.9
+  },
+  "memory_breakdown_mib": {
+    "mtl0_total": 58982,
+    "mtl0_model": 31108,
+    "mtl0_context": 1840,
+    "mtl0_compute": 522,
+    "mtl0_free": 25510,
+    "host": 1468
+  },
+  "output_sample_tail": "Paris.",
+  "raw_log": "results/raw/t0614_mac_p0_baseline_20260422_112847.log",
+  "notes": [
+    "128 tokens requested; actual output stopped early at EOS after a short 'thinking + Paris.' sequence.",
+    "Decode tok/s is therefore measured over a small number of tokens; consider re-running with a prompt that encourages longer output for a more stable decode measurement.",
+    "This is the C0 reference for Mac \u2014 P0 single-node, no compression, no ANE, no distributed."
+  ]
+}

@@ -144,7 +144,7 @@ Rule: Only mark a task done when the code, file, or artifact exists in this repo
 - [~] T-0611 Build anemll-flash-llama.cpp with Metal flags (Mac) and CUDA flags (PC) — Mac side DONE Session 18. `scripts/build_flash_moe.sh` clones `Anemll/anemll-flash-llama.cpp` to `vendor/anemll-flash-llama.cpp/`, builds with `-DGGML_METAL=ON -DLLAMA_FLASH_MOE_GPU_BANK=ON`. `build/bin/llama-cli` loads Metal library on M4 Max, detects `MTLGPUFamilyApple9` + `MTLGPUFamilyMetal4`. PC CUDA build is remote — run on PC node via WSL2 when needed (same script auto-detects Linux + CUDA toolkit).
 - [!] T-0612 Download Gemma 4 26B-A4B (`google/gemma-4-26B-A4B-it`) and run Flash-MoE sidecar extraction (SCOUT FIRST: 128-expert + 1-shared-expert topology is not what the extractor was built for)
 - [!] T-0613 Record P0 single-node PC baseline (C0 reference)
-- [!] T-0614 Record P0 single-node Mac baseline (C0 reference)
+- [x] T-0614 Record P0 single-node Mac baseline (C0 reference) — DONE Session 18. Gemma 4 31B Q8_0 (30 GB) on M4 Max via llama.cpp Metal, `--n-gpu-layers 99`, ctx=8192, temp=0. Prefill 64.1 tok/s, decode 14.9 tok/s, 33.5 GB of 58.9 GB wired VRAM used. Conversion fp16 safetensors -> Q8_0 GGUF via `.venv-convert/` (sibling venv with `transformers==5.5.1`, `numpy~=1.26.4` — conflicts with main venv's `numpy 2.x` which coremltools needs). Results JSON: `results/t0614_mac_p0_baseline.json`. Raw log in `results/raw/` (gitignored).
 - [!] T-0615 Record baseline perplexity runs (wikitext-2-raw-v1, 20 chunks, c=512)
 - [!] T-0616 Record baseline power measurements
 - [!] T-0617 Record distributed P1 baseline at 8K / 16K / 32K (C1)
