@@ -143,6 +143,17 @@ ASUS BIOS: enable AI Cache Boost for LLM workloads on the 5090 node.
 ## Known Constraints
 
 - EXO over USB4/TCP-IP is less proven than the earlier TB5 RDMA framing
+- Gemma 4 tooling requires `transformers>=5.5.0` (Gemma 4 landed 2026-04-02,
+  5.5.0 dropped Python 3.9); ANEMLL 0.3.5 requires Python 3.9. Two venvs are
+  needed: a Python 3.9 env for ANEMLL (already at `vendor/anemll/env-anemll/`)
+  and a Python 3.10+ env for anything that uses `transformers` to load Gemma 4
+  weights directly.
+- Gemma 4 E2B text-only ANE inference requires the chunked CoreML harness
+  (chunk1/2/3.mlmodelc + external PLE/embed/RoPE), not the monolith
+  `model.mlpackage`. Reference: `vendor/coreml-llm/` (john-rocky/CoreML-LLM,
+  MIT). Python port of `ChunkedEngine.swift` is tracked as T-0609a.
+- ANEMLL 0.3.5 (2026-02-14) has zero Gemma 4 support. Upstream PR with
+  `gemma4_text_model.py` + converter is tracked as T-0609b (stretch).
 - TQ4_1S requires TheTom/turboquant_plus fork, not mainline llama.cpp
 - ANE has 32 MB SRAM cliff (30% throughput drop beyond it)
 - ANE dimension efficiency cliff at dim=5120 (4.7x penalty -- keep <=4096)

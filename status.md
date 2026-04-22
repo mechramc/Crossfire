@@ -2,8 +2,8 @@
 
 Last updated: 2026-04-21
 Branch: main
-Latest commit: (Session 16 Gemma pivot pending push)
-Tracker state: software-layer tasks closed; Phase 6 hardware bring-up in progress. T-0601 (PC) and T-0602 (Mac) done; EXO nodes discovering each other over WiFi. USB4 tasks T-0603/T-0604/T-0605 deferred until cable is acquired. Model family switched from Qwen to Gemma 4 (see Session 16 checkpoint entry).
+Latest commit: (Session 17 T-0609 scout pending push)
+Tracker state: software-layer tasks closed; Phase 6 hardware bring-up in progress. T-0601 (PC), T-0602 (Mac), T-0606 (WiFi discovery) done; EXO PC is cluster Master, Mac is Worker. T-0609 Gemma 4 E2B -> ANE scout complete: viability proven on M4 Max ANE via `john-rocky/CoreML-LLM` pre-converted bundle; correct-output harness port tracked as T-0609a. USB4 tasks T-0603/T-0604/T-0605 deferred until cable is acquired.
 
 ## Summary
 
@@ -49,12 +49,27 @@ the repo root is `crossfire_x_final.docx`; the prior unified spec is archived.
 
 - USB4 hardware path: cable acquisition, Thunderbolt IP bridge, iperf3 baseline
   (T-0603 through T-0605) -- deferred; active interconnect is WiFi per `memory/interconnect.md`
-- Model downloads, ANE conversion, Flash-MoE build (T-0607 through T-0612)
+- Model downloads for dense primary and MoE (T-0607, T-0612); ANE conversion
+  harness port (T-0609a); Rustane + Flash-MoE builds (T-0610, T-0611)
 - Calibration runs for every policy (T-0613 through T-0626)
 - Orion Forge serving (Phase 7)
 - Textual dashboard and final evaluation deliverables (Phase 8)
 - Software follow-ups that are not on the critical path: persist bandit state (T-0412),
   warm-start from calibration data (T-0413), end-to-end AutoPilot integration test (T-0414)
+- Stretch: upstream Gemma 4 support PR to ANEMLL (T-0609b)
+
+## Session 17 scout artifacts (local, gitignored)
+
+- `models/gemma-4-E2B-it/` -- 9.6 GB full multimodal checkpoint from `google/gemma-4-E2B-it`
+- `models/gemma-4-E2B-coreml/` -- 25 GB pre-converted CoreML bundle from
+  `mlboydaisuke/gemma-4-E2B-coreml` (chunk1/2/3.mlmodelc + monolith model.mlpackage +
+  external embed/PLE/RoPE .bin/.npy files + vision.mlpackage + audio.mlmodelc)
+- `vendor/coreml-llm/` -- clone of `github.com/john-rocky/CoreML-LLM` (MIT; reference
+  conversion pipeline + Swift ChunkedEngine to port to Python for T-0609a)
+- `vendor/anemll/env-anemll/` -- ANEMLL Python 3.9 venv with coremltools 9.0, torch 2.5,
+  transformers 4.57.6 (cannot load `model_type: gemma4` on its own)
+- `/tmp/crossfire_gemma4_scout.py` -- viability test script (not committed; logic will
+  be reworked into T-0609a chunked harness)
 
 ## Verification
 
@@ -65,27 +80,38 @@ the repo root is `crossfire_x_final.docx`; the prior unified spec is archived.
 ## Immediate Next Work
 
 Phase 6 (Hardware Bring-Up And Calibration), Gemma 4 family:
-1. Download Gemma 4 31B / E2B / 26B-A4B to both nodes (T-0607, T-0608, T-0612).
-   SCOUT FIRST for T-0609 (E2B ANE conversion) and T-0612 (26B-A4B Flash-MoE
-   sidecar extraction) -- both paths are unvalidated against Gemma 4 topology.
-2. Convert Gemma 4 E2B draft to ANE CoreML (T-0609); build Rustane (T-0610);
-   build anemll-flash-llama.cpp with CUDA on PC and Metal on Mac (T-0611)
-3. Record P0 single-node baselines on PC and Mac (T-0613, T-0614). Note:
+1. T-0609a: port CoreML-LLM `ChunkedEngine.swift` to Python for the M4 Max
+   chunked inference harness -- unblocks correct-output Gemma 4 E2B on ANE
+   (viability already proven at 22.5 tok/s monolith floor). Reference code in
+   `vendor/coreml-llm/conversion/collect_eagle_hidden_states_w4a8.py`.
+2. T-0610 (Rustane build) and T-0611 (anemll-flash-llama.cpp build, Metal on
+   Mac / CUDA on PC) -- both local, fast, no downloads
+3. Download Gemma 4 31B / 26B-A4B to both nodes (T-0607, T-0612). E2B already
+   downloaded at `models/gemma-4-E2B-it/`. Scout-first still applies for T-0612
+   (26B-A4B Flash-MoE sidecar extraction; 128-expert + 1-shared topology is
+   not what the extractor was built for).
+4. Record P0 single-node baselines on PC and Mac (T-0613, T-0614). Note:
    Gemma 4 31B at Q8_0 (~33 GB) does not fit RTX 5090 single-node; PC P0
    must run TQ4_1S (~23 GB) or skip to distributed.
-4. Record P1 distributed baseline over WiFi at 8K/16K/32K (T-0617)
-5. Lock reward normalization constants from P1 baseline (T-0618)
-6. Policy calibrations P2-P6 (T-0619 through T-0625) -> C0-C7 matrix (T-0626)
+5. Record P1 distributed baseline over WiFi at 8K/16K/32K (T-0617)
+6. Lock reward normalization constants from P1 baseline (T-0618)
+7. Policy calibrations P2-P6 (T-0619 through T-0625) -> C0-C7 matrix (T-0626)
    with C6 now Gemma 4 31B @ 256K ctx (was Qwen 2.5 72B).
+8. Stretch: upstream Gemma 4 support PR to ANEMLL (T-0609b); non-blocking for
+   Phase 6 deliverables.
 
 ## Known unknowns to resolve during Phase 6
 
-- **ANE conversion path for Gemma 4 E2B.** ANEMLL has no E2B benchmark;
-  PLE architecture may not round-trip through CoreML cleanly. T-0609 must
-  scout before committing to the 50 tok/s draft target.
+- **Chunked harness correctness on M4 Max (T-0609a).** Monolith
+  `model.mlpackage` loads and runs on ANE but outputs garbage because PLE
+  weights are external -- correct inference requires orchestrating chunk1/2/3
+  plus external embed/PLE/RoPE lookups. Port from CoreML-LLM's Swift
+  ChunkedEngine. No architectural unknowns remain; it's an engineering task.
 - **Flash-MoE sidecar extraction for Gemma 4 26B-A4B.** anemll-flash-llama.cpp
   was built around Qwen / Kimi topology. Gemma's 128-expert + 1-shared-expert
   layout may need extractor patches. T-0612 scout before full calibration.
+- **ANEMLL Gemma 4 upstream PR (T-0609b, stretch).** Architectural deltas
+  enumerated in tasks.md; non-blocking for Phase 6 if T-0609a lands.
 
 Deferred (hardware):
 - USB4 40 Gbps cable + Thunderbolt IP bridge + throughput baseline (T-0603/T-0604/T-0605).

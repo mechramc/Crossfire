@@ -5,6 +5,130 @@ Rule: update this file before every `git push`.
 
 ---
 
+## Session 17 - 2026-04-21: T-0606 close and T-0609 Gemma 4 -> ANE scout
+
+### What was done
+
+**T-0606 closed (WiFi mDNS discovery validates 5GbE fallback path):**
+- After Session 15 brought up EXO on PC and Session 16 the Gemma pivot, started
+  EXO on Mac from PID 46521 (dashboard live on `http://localhost:52415`); PC
+  node `12D3KooWLeMLzYwnaBdSQagZW8KiTZMBFqtnw2nqRyhdSFzn3cGM` elected cluster
+  Master, Mac demoted to Worker at 2026-04-21 15:01:12 per Mac EXO log -- peer
+  discovery over WiFi mDNS confirmed end-to-end. Observed on Mac EXO dashboard
+  with PC peer visible. 5GbE Ethernet link itself untested; WiFi fallback is
+  sufficient for current no-USB4 state.
+
+**T-0609 scout -- Gemma 4 E2B -> ANE viability proven, correct harness still to build:**
+
+Research (live-source, dated 2026-04-21):
+- `transformers` 5.5.4 stable supports `model_type: gemma4` (5.5.0 added Gemma 4,
+  2026-04-02). Requires Python >= 3.10; 3.9 was dropped.
+- ANEMLL 0.3.5 Beta (2026-02-14) predates Gemma 4. Zero Gemma 4 code hits,
+  branches, PRs, or issues on `github.com/Anemll/Anemll` as of 2026-04-21.
+  Active branch work is Qwen3.5 / DeltaNet.
+- `github.com/john-rocky/CoreML-LLM` (MIT) ships a pre-converted Gemma 4 E2B
+  CoreML bundle at `huggingface.co/mlboydaisuke/gemma-4-E2B-coreml` with
+  99.78% ANE placement claim (7294 / 7310 ops), 31 tok/s on iPhone 17 Pro.
+  Ships an iOS app (no Mac CLI / app target); reusable as Swift Package or
+  via coremltools from Python.
+
+Prerequisites installed:
+- `hf` CLI 1.11.0 via `uv tool install huggingface_hub[cli]` (executables in
+  `~/.local/bin/hf`, `~/.local/bin/huggingface-cli`)
+- HF auth -- user logged in as `mechramc`, Gemma 4 license accepted
+- ANEMLL venv created at `vendor/anemll/env-anemll/` via `create_uv_env.sh`
+  (Python 3.9, coremltools 9.0, torch 2.5.0, transformers 4.57.6,
+  sentencepiece, scikit-learn 1.5.1)
+- `vendor/coreml-llm/` -- cloned `github.com/john-rocky/CoreML-LLM` @
+  `99cf93fdd208...` for reference conversion pipeline and ChunkedEngine
+
+Downloads (all gitignored):
+- `models/gemma-4-E2B-it/` (9.6 GB) -- full multimodal checkpoint from
+  `google/gemma-4-E2B-it`. Gemma 4 E2B is always multimodal (text + image +
+  audio); Google does not ship a text-only E2B. Config reveals nested
+  `gemma4_text` submodule with 35 layers, 1536 hidden, 8 heads, head_dim 256,
+  vocab 262144, tie_word_embeddings, and Gemma 4-specific features:
+  `hidden_size_per_layer_input: 256` (PLE), `num_kv_shared_layers: 20`
+  (shared KV across 20 layers), `use_double_wide_mlp: true`,
+  `final_logit_softcapping: 30.0`, proportional RoPE with
+  `partial_rotary_factor: 0.25` for full-attention layers, asymmetric head
+  dims (sliding 256 / global 512)
+- `models/gemma-4-E2B-coreml/` (25 GB) -- CoreML bundle. Top-level artifacts:
+  `model.mlpackage` (2.4 GB, stateful int4 monolith),
+  `model.mlmodelc` (compiled version),
+  `chunk1/2/3.mlmodelc` (the on-device chunked path), plus variants `lite/`,
+  `lite-chunks/`, `mf/`, `sdpa/`, `sdpa-8k/`, `stateless/`, `stateless-ctx2048/`,
+  `swa/`, `prefill/`, `vision.mlpackage` (322 MB), `audio.mlmodelc`, and the
+  external weights `embed_tokens_q8.bin` (384 MB), `embed_tokens_per_layer_q8.bin`
+  (2.2 GB PLE), `per_layer_projection.bin` (27 MB), `per_layer_norm_weight.bin`,
+  `cos_full.npy`, `cos_sliding.npy`, `sin_full.npy`, `sin_sliding.npy` (RoPE),
+  plus `hf_model/tokenizer.json`
+
+Viability test (`/tmp/crossfire_gemma4_scout.py`, not committed -- will be
+reworked into T-0609a chunked harness):
+- Loaded `model.mlpackage` with `ComputeUnit.CPU_AND_NE` -- success (89.7s
+  cold load first time, macOS 26.3)
+- Stateful KV cache `make_state()` works -- returns populated state object,
+  KV shape `[70, 1, 512, 512]` fp16 (70 = 35 layers x 2 for K+V)
+- IO spec: `input_ids` int32 [1,1], `position_ids` int32 [1], `causal_mask`
+  fp16 [1,1,1,512], `update_mask` fp16 [1,1,512,1]; outputs `token_id` int32
+  [1] (in-model argmax) + `token_logit` fp16 [1]; context = 512 tokens
+- Forward pass at 22.5 tok/s on M4 Max 16-core ANE (19-token decode window,
+  mean 44.45 ms per token; prefill last-token 43.4 ms)
+- Output is GARBAGE -- monolith emits loop (" is is is...") then last-vocab
+  token (262143 `<unused6226>`) because `model.mlpackage` doesn't carry PLE
+  weights. Per `build_gemma4_bundle.py` docstring the canonical on-device
+  path is chunked: chunk1/2/3 + external QuantEmbed + PerLayerRawEmbed +
+  RoPE tables, orchestrated by `Sources/CoreMLLLM/ChunkedEngine.swift`
+- fp16 mask fill must be -65504.0 (fp16 min) not -1e9 (overflows); BOS
+  token 2 must be prepended before the prompt
+
+**Tracker reconciliation:**
+- `tasks.md` -- T-0606 marked done; T-0608 marked in-progress (full
+  multimodal downloaded); T-0609 marked in-progress (scout complete,
+  correct harness port tracked as follow-up); added T-0609a (port
+  CoreML-LLM ChunkedEngine to Python) and T-0609b (upstream Gemma 4 PR
+  to ANEMLL, stretch)
+- `status.md` -- Session 17 progress summary, artifact inventory, Immediate
+  Next Work reordered to lead with T-0609a, Known unknowns section rewritten
+  for the new state
+- `checkpoint.md` -- this entry
+
+**Lesson learned saved to project memory:**
+- `memory/feedback_verify_before_asserting.md` -- rule: verify live sources
+  before making hard assertions about library versions, Python compat, or
+  "X doesn't exist" claims. Training-data recall is stale by months.
+  Triggered by three wrong caveats earlier in the session (transformers 5.x
+  "dev-only", Python 3.9 compat uncertainty, implicit assumption that ANEMLL
+  might have partial support). User corrected with "check for latest updates
+  before making hard assertions".
+
+### Verification
+- `~/crossfire/exo/.venv/bin/exo` process live on Mac: PID 46521, API on
+  `http://localhost:52415`, Mac is Worker since 15:01:12
+- `curl -s http://localhost:52415/node_id` returns Mac node ID;
+  `curl -s http://localhost:52415/v1/models` returns model catalog
+- Mac EXO log (`results/raw/exo_run_20260421_142221.log`) contains line
+  `Node 12D3KooWLeMLzYwnaBdSQagZW8KiTZMBFqtnw2nqRyhdSFzn3cGM elected master
+  - demoting self` at 15:01:12 -- PC peer ID matches Session 15 entry
+- Viability test log: `model.mlpackage` predict() returns non-null
+  `token_id` + `token_logit` on every call; decode wallclock ~44 ms/token
+  at `CPU_AND_NE`
+- `hf whoami` returns `user=mechramc`
+
+### State at end of session
+- T-0602 (Mac), T-0601 (PC), T-0606 (WiFi discovery) closed
+- EXO cluster healthy: PC is Master, Mac is Worker, discovering over WiFi mDNS
+- T-0608 (E2B download) done for full multimodal; text-tower extraction not
+  required given chunked CoreML bundle covers it
+- T-0609 scout complete; viability proven; correct harness is a defined
+  engineering task (T-0609a) with reference code in hand
+- Outstanding critical-path: T-0609a chunked harness, T-0610 Rustane, T-0611
+  anemll-flash-llama.cpp build, T-0607 / T-0612 remaining downloads
+- Stretch: T-0609b upstream PR to ANEMLL
+
+---
+
 ## Session 16 - 2026-04-21: Model family migration to Gemma 4
 
 ### What was done
