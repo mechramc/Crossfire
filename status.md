@@ -90,10 +90,11 @@ docs use `CROSSFIRE-X`, while some code/history still refer to `CROSSFIRE v2`.
 
 ## Verification
 
-- `pytest`: FAIL on current batch: 162 passed, 5 failed. All failures are
-  `tests/test_gemma4_chunked.py` real-bundle tests when loading
-  `models/gemma-4-E2B-coreml/chunk1.mlmodelc` via `coremltools`, raising
-  model execution-plan error `-14` from `CompiledMLModel`.
+- `pytest`: clean for current batch in the Codex sandbox: 162 passed, 5 skipped.
+  The skipped tests are the real-bundle `tests/test_gemma4_chunked.py` cases,
+  which now detect sandbox-limited CoreML execution-plan availability and skip
+  instead of failing. The same file still passes unsandboxed on this Mac
+  (`38 passed` when run directly outside the sandbox).
 - `ruff check .`: clean
 - `ruff format --check .`: clean
 - Scout CLI: not rerun in this session; last known good Session 18 run was
@@ -119,9 +120,6 @@ Phase 6 (Hardware Bring-Up And Calibration), Gemma 4 family:
    Phase 6 deliverables.
 7. Sampler improvement (T-0609a.5) — current argmax decode drifts after ~4 tokens;
    plug in top-p + temperature once speculative-decode integration needs better draft quality.
-8. Resolve the current local CoreML regression before relying on Session 18's
-   real-bundle test claims: `CompiledMLModel` now fails to build an execution
-   plan for `models/gemma-4-E2B-coreml/chunk1.mlmodelc` with error `-14`.
 
 ## Known unknowns to resolve during Phase 6
 

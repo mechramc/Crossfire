@@ -5,6 +5,41 @@ Rule: update this file before every `git push`.
 
 ---
 
+## Session 20 - 2026-04-22: Make Gemma 4 CoreML real-bundle tests sandbox-safe
+
+### What was done
+
+- Investigated the apparent Mac-side CoreML regression from Session 19.
+- Confirmed the failure was environment-specific: inside the Codex sandbox,
+  `coremltools` could not build an execution plan for
+  `models/gemma-4-E2B-coreml/chunk1.mlmodelc`, but the same real-bundle test
+  file passed unsandboxed on the same machine (`./.venv/bin/pytest
+  tests/test_gemma4_chunked.py -q` -> `38 passed`).
+- Updated `tests/test_gemma4_chunked.py` so the real-bundle tests first probe
+  whether CoreML can build a `CompiledMLModel` execution plan in the current
+  runtime. If the runtime is sandbox-limited, those tests now skip with an
+  explicit reason instead of failing as if the bundle were broken.
+- Left the actual inference logic untouched. This fix is about test behavior in
+  restricted environments, not about changing the Gemma 4 chunked engine.
+
+### Verification
+
+- `./.venv/bin/pytest`: clean in the sandbox — `162 passed, 5 skipped`
+- `./.venv/bin/ruff check .`: clean
+- `./.venv/bin/ruff format --check .`: clean
+- `./.venv/bin/pytest tests/test_gemma4_chunked.py -q` outside the sandbox:
+  `38 passed`
+
+### State at end of session
+
+- The Mac-side CoreML path is not currently broken in repo code.
+- Sandbox-limited CoreML availability no longer shows up as a false code
+  failure in repo verification.
+- Remaining Mac work is back to the actual roadmap items: ANE follow-ups,
+  model prep, and calibration runs.
+
+---
+
 ## Session 19 - 2026-04-22: Tracker sync for WiFi interconnect decision
 
 ### What was done
