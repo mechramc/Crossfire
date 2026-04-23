@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -218,15 +219,126 @@ def test_cli_args_stock_mode_omits_slot_bank_flags():
 # --- FlashMoERuntime hardware-gated paths ------------------------------------
 
 
-def test_run_inference_raises_not_implemented():
-    """Inference is gated until anemll-flash-llama.cpp is built."""
-    rt = _stock_runtime()
-    with pytest.raises(NotImplementedError, match=r"anemll-flash-llama\.cpp"):
-        rt.run_inference(Path("/models/gemma.gguf"), prompt="hello")
+def test_parse_inference_output_parses_flash_moe_metrics():
+    output = "\n".join(
+        [
+            "llama_perf_context_print:        eval time =     120.00 ms /    10 runs   "
+            "(   12.00 ms per token,    83.33 tokens per second)",
+            "llama_context:   slot-bank cached expert hit rate: 92.5%",
+            "llama_context: Flash-MoE routed src=pread-slot-bank calls=10 refs=80 "
+            "uniq=12 hit=92.5% miss/call=0.40 bytes=0.12 GiB topk=4.000 ms "
+            "resolve=1.0 ms install=2.0 ms source=3.0 ms upload=4.0 ms "
+            "slotwr=5.0 ms trace=0.0 ms other=0.0 ms pread=7 rcopy=0 iosplit=4 "
+            "async=yes preads=yes batchrd=yes mixbuf=no cpuvis=yes",
+        ]
+    )
+    stats = FlashMoERuntime._parse_inference_output(output)
+    assert stats.hit_rate == pytest.approx(0.925)
+    assert stats.miss_count == 7
+    assert stats.expert_loads == 80
+    assert stats.decode_tok_s == pytest.approx(83.33)
 
 
-def test_extract_sidecar_raises_not_implemented():
-    """Sidecar extraction is gated until tools are built."""
+def test_run_inference_executes_binary_and_parses_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    binary = tmp_path / "llama-cli"
+    model = tmp_path / "gemma.gguf"
+    binary.write_text("", encoding="utf-8")
+    model.write_text("", encoding="utf-8")
+
+    def fake_run(
+        args: list[str],
+        check: bool,
+        capture_output: bool,
+        text: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        assert str(binary) == args[0]
+        assert "--perf" in args
+        assert "-p" in args
+        assert "-n" in args
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=0,
+            stdout=(
+                "llama_perf_context_print:        eval time =      50.00 ms /     5 runs   "
+                "(   10.00 ms per token,   100.00 tokens per second)\n"
+            ),
+            stderr=(
+                "llama_context:   slot-bank cached expert hit rate: 90.0%\n"
+                "llama_context: Flash-MoE routed src=pread-slot-bank calls=5 refs=40 "
+                "uniq=8 hit=90.0% miss/call=0.20 bytes=0.05 GiB topk=4.000 ms "
+                "resolve=1.0 ms install=2.0 ms source=3.0 ms upload=4.0 ms "
+                "slotwr=5.0 ms trace=0.0 ms other=0.0 ms pread=3 rcopy=0 iosplit=4 "
+                "async=yes preads=yes batchrd=yes mixbuf=no cpuvis=yes\n"
+            ),
+        )
+
+    monkeypatch.setattr("crossfire.flashmoe.runtime.subprocess.run", fake_run)
+    rt = FlashMoERuntime(binary_path=binary)
+    stats = rt.run_inference(model, prompt="hello", max_tokens=16)
+    assert stats.hit_rate == pytest.approx(0.9)
+    assert stats.miss_count == 3
+    assert stats.expert_loads == 40
+    assert stats.decode_tok_s == pytest.approx(100.0)
+
+
+def test_run_inference_missing_binary_raises(tmp_path: Path):
+    model = tmp_path / "gemma.gguf"
+    model.write_text("", encoding="utf-8")
+    rt = FlashMoERuntime(binary_path=tmp_path / "missing-llama-cli")
+    with pytest.raises(FileNotFoundError, match="Flash-MoE binary"):
+        rt.run_inference(model, prompt="hello")
+
+
+def test_extract_sidecar_invokes_vendored_tool(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    model = tmp_path / "gemma.gguf"
+    model.write_text("", encoding="utf-8")
+    out_dir = tmp_path / "sidecar"
+    out_dir.mkdir()
+    (out_dir / "manifest.json").write_text("{}", encoding="utf-8")
+    calls: list[list[str]] = []
+
+    def fake_run(
+        args: list[str],
+        check: bool,
+        capture_output: bool,
+        text: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("crossfire.flashmoe.runtime.subprocess.run", fake_run)
     rt = _stock_runtime()
-    with pytest.raises(NotImplementedError, match="Sidecar extraction"):
-        rt.extract_sidecar(Path("/models/gemma.gguf"), Path("/tmp/out"))
+    sidecar = rt.extract_sidecar(model, out_dir, include_shared=True, force=True)
+    assert sidecar.sidecar_path == out_dir.resolve()
+    assert len(calls) == 2
+    assert "extract" in calls[0]
+    assert "--include-shared" in calls[0]
+    assert "--force" in calls[0]
+    assert "verify" in calls[1]
+
+
+def test_inspect_sidecar_returns_json_payload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    model = tmp_path / "gemma.gguf"
+    model.write_text("", encoding="utf-8")
+
+    def fake_run(
+        args: list[str],
+        check: bool,
+        capture_output: bool,
+        text: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=0,
+            stdout='{"model": {"arch": "gemma4"}, "gguf": {"tensor_count": 1}}',
+            stderr="",
+        )
+
+    monkeypatch.setattr("crossfire.flashmoe.runtime.subprocess.run", fake_run)
+    rt = _stock_runtime()
+    payload = rt.inspect_sidecar(model)
+    assert payload["model"] == {"arch": "gemma4"}
+    assert payload["gguf"] == {"tensor_count": 1}

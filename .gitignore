@@ -30,6 +30,7 @@ build/
 
 # Virtual environments
 .venv/
+.venv-convert/
 venv/
 env/
 .env

@@ -5,6 +5,120 @@ Rule: update this file before every `git push`.
 
 ---
 
+## Session 21 - 2026-04-22: Wire Flash-MoE scout/extract path for T-0612
+
+### What was done
+
+- Replaced the Flash-MoE runtime stubs in `src/crossfire/flashmoe/runtime.py`
+  with real wrappers around the vendored Anemll tooling.
+- `FlashMoERuntime.extract_sidecar()` now calls
+  `vendor/anemll-flash-llama.cpp/tools/flashmoe-sidecar/flashmoe_sidecar.py`
+  to extract a sidecar from a MoE GGUF and optionally verify it.
+- Added `inspect_sidecar()` and `verify_sidecar()` wrappers so the repo can
+  probe Gemma 4 26B-A4B extractor compatibility before committing to a full
+  Flash-MoE run.
+- Implemented `run_inference()` against the built `llama-cli` and parse the
+  `--perf` output into `FlashMoEStats` (hit rate, pread count, expert loads,
+  decode tok/s) for smoke tests once the model exists locally.
+- Added `scripts/run_flashmoe_scout.py` as a repo-level T-0612 entrypoint:
+  inspect -> optional extract/verify -> optional smoke inference.
+- Added test coverage in `tests/test_flashmoe.py` for output parsing, binary
+  execution wrapping, and sidecar tool invocation.
+
+### Verification
+
+- `./.venv/bin/pytest`: `165 passed, 5 skipped`
+- `./.venv/bin/ruff check .`: clean
+- `./.venv/bin/ruff format --check .`: clean
+
+### State at end of session
+
+- Repo-side support for T-0612 now exists and is verified.
+- T-0612 itself is still not complete because `models/` does not yet contain a
+  Gemma 4 26B-A4B GGUF to inspect/extract against.
+- T-0617 remains blocked on cross-node runtime/model availability; no fake
+  distributed baseline was recorded.
+
+---
+
+## Session 20 - 2026-04-22: Make Gemma 4 CoreML real-bundle tests sandbox-safe
+
+### What was done
+
+- Investigated the apparent Mac-side CoreML regression from Session 19.
+- Confirmed the failure was environment-specific: inside the Codex sandbox,
+  `coremltools` could not build an execution plan for
+  `models/gemma-4-E2B-coreml/chunk1.mlmodelc`, but the same real-bundle test
+  file passed unsandboxed on the same machine (`./.venv/bin/pytest
+  tests/test_gemma4_chunked.py -q` -> `38 passed`).
+- Updated `tests/test_gemma4_chunked.py` so the real-bundle tests first probe
+  whether CoreML can build a `CompiledMLModel` execution plan in the current
+  runtime. If the runtime is sandbox-limited, those tests now skip with an
+  explicit reason instead of failing as if the bundle were broken.
+- Left the actual inference logic untouched. This fix is about test behavior in
+  restricted environments, not about changing the Gemma 4 chunked engine.
+
+### Verification
+
+- `./.venv/bin/pytest`: clean in the sandbox — `162 passed, 5 skipped`
+- `./.venv/bin/ruff check .`: clean
+- `./.venv/bin/ruff format --check .`: clean
+- `./.venv/bin/pytest tests/test_gemma4_chunked.py -q` outside the sandbox:
+  `38 passed`
+
+### State at end of session
+
+- The Mac-side CoreML path is not currently broken in repo code.
+- Sandbox-limited CoreML availability no longer shows up as a false code
+  failure in repo verification.
+- Remaining Mac work is back to the actual roadmap items: ANE follow-ups,
+  model prep, and calibration runs.
+
+---
+
+## Session 19 - 2026-04-22: Tracker sync for WiFi interconnect decision
+
+### What was done
+
+- Updated `tasks.md` to reclassify T-0603/T-0604/T-0605 from implied bring-up
+  blockers to optional future TB4/USB4 optimization tasks. Current repo reality
+  is that the cluster runs over WiFi and higher-bandwidth cable work is only
+  needed if WiFi throughput is not enough.
+- Updated T-0606 wording to reflect the actual validated path: WiFi mDNS
+  discovery between PC and Mac is the active production interconnect path.
+- Updated `status.md` to remove stale next-work items that were already complete
+  in Session 18 (`T-0610`, Mac side of `T-0611`, and `T-0614`), and to state
+  explicitly that WiFi is the active interconnect.
+- Added a naming-mismatch callout in `status.md` per `AGENTS.md`: planning/user
+  docs say `CROSSFIRE-X`, while some historical code/doc references still say
+  `CROSSFIRE v2`.
+- Updated `README.md` so the top-level project description no longer claims that
+  USB4 cable acquisition is required for the current execution path, while still
+  preserving TB4/USB4 as a future option if WiFi underperforms.
+
+### Verification
+
+- `./.venv/bin/pytest`: FAIL. 162 passed, 5 failed, all in
+  `tests/test_gemma4_chunked.py` real-bundle coverage. Failure occurs while
+  loading `models/gemma-4-E2B-coreml/chunk1.mlmodelc` through
+  `ct.models.CompiledMLModel`, which now raises CoreML execution-plan error
+  `-14`.
+- `./.venv/bin/ruff check .`: clean
+- `./.venv/bin/ruff format --check .`: clean
+
+### State at end of session
+
+- Tracker/docs now match the user decision that WiFi is the active interconnect.
+- TB4/USB4 work remains available as an optional future optimization and
+  benchmark path, not as a blocker for current Mac or cluster work.
+- Next actual blockers remain remote-node model prep and Phase 6 calibration,
+  not cable acquisition.
+- Verification is not fully green: the real-bundle Gemma 4 CoreML tests that
+  passed in Session 18 do not currently load on this machine, so that regression
+  remains an open blocker and is recorded in `status.md`.
+
+---
+
 ## Session 18 - 2026-04-22: T-0609a Gemma 4 E2B chunked engine (Python port of ChunkedEngine.swift)
 
 ### What was done

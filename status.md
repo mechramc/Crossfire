@@ -2,8 +2,7 @@
 
 Last updated: 2026-04-22
 Branch: main
-Latest commit: (Session 18 T-0609a chunked engine pending push)
-Tracker state: software-layer tasks closed; Phase 6 hardware bring-up in progress. T-0601 (PC), T-0602 (Mac), T-0606 (WiFi discovery) done; EXO PC is cluster Master, Mac is Worker. T-0609a Gemma 4 E2B chunked CoreML engine DONE: `src/crossfire/ane/gemma4_chunked.py` loads 3 stateful chunks (MLState API), generates coherent text ("Paris" for "The capital of France is"), measured 42.98 tok/s decode / 138.9 ms TTFT on M4 Max ANE. Project venv migrated to Python 3.13.12 (coremltools 9.0 has no working native wheel for 3.14). USB4 tasks T-0603/T-0604/T-0605 deferred until cable is acquired.
+Tracker state: software-layer tasks closed; Phase 6 calibration and model-prep work remain. T-0601 (PC), T-0602 (Mac), and T-0606 (active WiFi discovery path) are done; EXO PC is cluster Master, Mac is Worker. T-0609a Gemma 4 E2B chunked CoreML engine DONE: `src/crossfire/ane/gemma4_chunked.py` loads 3 stateful chunks (MLState API), generates coherent text ("Paris" for "The capital of France is"), measured 42.98 tok/s decode / 138.9 ms TTFT on M4 Max ANE. T-0610 Rustane and the Mac half of T-0611 are already complete. Project venv migrated to Python 3.13.12 (coremltools 9.0 has no working native wheel for 3.14). WiFi is the active interconnect; T-0603/T-0604/T-0605 remain optional future TB4/USB4 work if WiFi throughput proves insufficient, but they are not current blockers.
 
 ## Summary
 
@@ -13,6 +12,8 @@ Repository docs, code, configs, scripts, and tests are aligned with
 outcomes back into the reward + bandit layer. The anemll-flash-llama.cpp
 build is automated by `scripts/build_flash_moe.sh`. The only `.docx` spec in
 the repo root is `crossfire_x_final.docx`; the prior unified spec is archived.
+There is still a naming mismatch to keep visible: planning docs and user-facing
+docs use `CROSSFIRE-X`, while some code/history still refer to `CROSSFIRE v2`.
 
 ## Completed In Repo
 
@@ -37,6 +38,11 @@ the repo root is `crossfire_x_final.docx`; the prior unified spec is archived.
 - `scripts/setup_mac.sh`, `scripts/setup_pc.sh` -- Thunderbolt IP bridge guidance,
   iperf3 probe, nc reachability check; EXO installed from source via uv
 - `scripts/build_flash_moe.sh` -- cross-platform anemll-flash-llama.cpp build automation
+- `src/crossfire/flashmoe/runtime.py` -- wraps the vendored Flash-MoE sidecar tool
+  (`inspect` / `extract` / `verify`) and parses `llama-cli --perf` output into
+  `FlashMoEStats` for smoke runs
+- `scripts/run_flashmoe_scout.py` -- repo entrypoint for T-0612 scout work
+  against Gemma 4 26B-A4B once the GGUF is present locally
 
 ### Tests
 - `tests/test_ane.py`, `tests/test_pipeline.py`, `tests/test_metrics.py`
@@ -47,10 +53,9 @@ the repo root is `crossfire_x_final.docx`; the prior unified spec is archived.
 
 ## Not Started
 
-- USB4 hardware path: cable acquisition, Thunderbolt IP bridge, iperf3 baseline
-  (T-0603 through T-0605) -- deferred; active interconnect is WiFi per `memory/interconnect.md`
-- Model downloads for dense primary and MoE (T-0607, T-0612); Rustane + Flash-MoE
-  builds (T-0610, T-0611)
+- PC-side dense model prep and MoE extraction work (remaining pieces of T-0607 and T-0612)
+  Repo-side T-0612 scout tooling is now implemented; the remaining blocker is
+  the actual Gemma 4 26B-A4B GGUF/model acquisition and extraction run.
 - Calibration runs for every policy (T-0613 through T-0626)
 - Orion Forge serving (Phase 7)
 - Textual dashboard and final evaluation deliverables (Phase 8)
@@ -59,6 +64,10 @@ the repo root is `crossfire_x_final.docx`; the prior unified spec is archived.
 - T-0609a follow-ups (none blocking Phase 6 calibration): batched prefill (a.1),
   prefix cache (a.2), speculative/verify (a.3), multimodal (a.4), top-k/p sampler (a.5)
 - Stretch: upstream Gemma 4 support PR to ANEMLL (T-0609b)
+- Optional future interconnect optimization: TB4/USB4 cable, Thunderbolt IP bridge,
+  and throughput baseline (T-0603 through T-0605). These are no longer required
+  for current Phase 6 execution because the active cluster path is WiFi, but
+  they stay on the roadmap if WiFi throughput is not enough.
 
 ## Session 18 chunked engine artifacts
 
@@ -88,33 +97,35 @@ the repo root is `crossfire_x_final.docx`; the prior unified spec is archived.
 
 ## Verification
 
-- `pytest`: 167 passed (129 pre-existing + 38 new gemma4 tests, including real-bundle
-  end-to-end that loads 3 chunks on ANE and asserts "Paris" in the generated text)
+- `pytest`: clean for current batch in the Codex sandbox: 165 passed, 5 skipped.
+  The skipped tests are the real-bundle `tests/test_gemma4_chunked.py` cases,
+  which now detect sandbox-limited CoreML execution-plan availability and skip
+  instead of failing. The same file still passes unsandboxed on this Mac
+  (`38 passed` when run directly outside the sandbox).
 - `ruff check .`: clean
 - `ruff format --check .`: clean
-- Scout CLI: `python scripts/run_gemma4_scout.py --prompt "The capital of France is"
-  --max-tokens 24` -> generates " Paris." + continuation, reports TTFT 138.9 ms +
+- Scout CLI: not rerun in this session; last known good Session 18 run was
+  `python scripts/run_gemma4_scout.py --prompt "The capital of France is"
+  --max-tokens 24` -> generated " Paris." + continuation, reports TTFT 138.9 ms +
   decode 42.98 tok/s on M4 Max at `cpu_and_ne`
 
 ## Immediate Next Work
 
 Phase 6 (Hardware Bring-Up And Calibration), Gemma 4 family:
-1. T-0610 (Rustane build) and T-0611 (anemll-flash-llama.cpp build, Metal on
-   Mac / CUDA on PC) -- both local, fast, no downloads
-2. Download Gemma 4 31B / 26B-A4B to both nodes (T-0607, T-0612). E2B already
+1. Finish the remaining remote-node model prep: T-0607.pc and T-0612. E2B already
    downloaded at `models/gemma-4-E2B-it/`. Scout-first still applies for T-0612
    (26B-A4B Flash-MoE sidecar extraction; 128-expert + 1-shared topology is
    not what the extractor was built for).
-3. Record P0 single-node baselines on PC and Mac (T-0613, T-0614). Note:
+2. Record the remaining P0 single-node baseline on PC (T-0613). T-0614 on Mac is done. Note:
    Gemma 4 31B at Q8_0 (~33 GB) does not fit RTX 5090 single-node; PC P0
    must run TQ4_1S (~23 GB) or skip to distributed.
-4. Record P1 distributed baseline over WiFi at 8K/16K/32K (T-0617)
-5. Lock reward normalization constants from P1 baseline (T-0618)
-6. Policy calibrations P2-P6 (T-0619 through T-0625) -> C0-C7 matrix (T-0626)
+3. Record P1 distributed baseline over WiFi at 8K/16K/32K (T-0617)
+4. Lock reward normalization constants from P1 baseline (T-0618)
+5. Policy calibrations P2-P6 (T-0619 through T-0625) -> C0-C7 matrix (T-0626)
    with C6 now Gemma 4 31B @ 256K ctx (was Qwen 2.5 72B).
-7. Stretch: upstream Gemma 4 support PR to ANEMLL (T-0609b); non-blocking for
+6. Stretch: upstream Gemma 4 support PR to ANEMLL (T-0609b); non-blocking for
    Phase 6 deliverables.
-8. Sampler improvement (T-0609a.5) — current argmax decode drifts after ~4 tokens;
+7. Sampler improvement (T-0609a.5) — current argmax decode drifts after ~4 tokens;
    plug in top-p + temperature once speculative-decode integration needs better draft quality.
 
 ## Known unknowns to resolve during Phase 6
@@ -131,7 +142,8 @@ Phase 6 (Hardware Bring-Up And Calibration), Gemma 4 family:
 - **ANEMLL Gemma 4 upstream PR (T-0609b, stretch).** Architectural deltas
   enumerated in tasks.md; non-blocking for Phase 6 now that T-0609a is done.
 
-Deferred (hardware):
-- USB4 40 Gbps cable + Thunderbolt IP bridge + throughput baseline (T-0603/T-0604/T-0605).
+Optional future interconnect work:
+- TB4/USB4 40 Gbps cable + Thunderbolt IP bridge + throughput baseline (T-0603/T-0604/T-0605).
   Active interconnect is WiFi; composed TriAttention + TurboQuant compression is the
-  bandwidth-hiding strategy. Revisit once the cable is acquired.
+  bandwidth-hiding strategy. Revisit if WiFi throughput is not sufficient for the
+  target workload.
