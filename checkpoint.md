@@ -90,10 +90,41 @@ on a model that is ~37% smaller on disk.
 - Tests / lint not re-run in this session (no Python source changes; only doc
   edits and a remote-node smoke).
 
+### Follow-up: T-0613 PC P0 baseline (also Session 23)
+
+After closing T-0607.pc, ran the formal C0 baseline with proper Gemma 4 chat
+template to unblock the calibration matrix:
+
+```
+~/llama-cpp-v010/build/bin/llama-completion \
+  -m .../Gemma-4-31B-it-Config-I.gguf \
+  --jinja --no-warmup -p 'The capital of France is' \
+  -n 64 --n-gpu-layers 99 --seed 1 </dev/null
+```
+
+Closing stdin (`</dev/null`) makes the `--jinja` chat-mode REPL exit after the
+first response so `--perf` actually fires (without it the binary stays in
+interactive mode forever).
+
+**Results:**
+
+| Metric         | Value                                                  |
+| -------------- | ------------------------------------------------------ |
+| Prefill        | 139.45 tok/s (20 toks @ 7.17 ms each)                  |
+| Decode         | 42.76 tok/s (63 toks @ 23.39 ms each)                  |
+| Total          | 1665 ms / 83 tokens                                    |
+| Load           | 176 ms (warmup off; weights already mmap-warm in cache)|
+| CUDA0 used     | 30,064 MiB (28,021 model + 1,520 KV + 522 compute)     |
+| Output         | "...The capital of France is Paris..." (coherent)      |
+
+Vs T-0614 Mac Q8_0 baseline: PC is 2.2x prefill (139.45 vs 64.1) and 2.9x
+decode (42.76 vs 14.9) on a model that is 37% smaller on disk. Recorded as
+`results/t0613_pc_p0_baseline.json` with the raw log under
+`results/raw/t0613_pc_p0_baseline.log` (gitignored). T-0613 is closed.
+
 ### State at end of session
 
-- T-0607.pc is closed.
-- T-0613 (PC P0 single-node baseline) is now unblocked but not started.
+- T-0607.pc and T-0613 are both closed.
 - Side toolchain `~/llama-cpp-v010/build/` is the binary to use for any future
   smoke or perf work against a v0.1.0-built GGUF.
 - T-0612.pc (PC vanilla TQ4_1S of 26B-A4B) is the next remaining PC model-prep

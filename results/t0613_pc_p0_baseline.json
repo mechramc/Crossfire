@@ -1,0 +1,68 @@
+{
+  "task_id": "T-0613",
+  "description": "PC P0 single-node baseline (C0 reference) \u2014 Gemma 4 31B Config-I (TQ4_1S/Q4_K/Q8_0 mixed) via llama-completion CUDA on RTX 5090",
+  "timestamp_utc": "2026-04-23T08:45:00+00:00",
+  "node": "pc",
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 5090",
+    "compute_capability": "12.0 (Blackwell)",
+    "vram_total_mib": 32606,
+    "host": "WSL2 Ubuntu on Windows 11"
+  },
+  "execution_policy": "P0",
+  "ablation_config": "C0",
+  "backend": "llama-completion (TheTom/llama-cpp-turboquant @ tqp-v0.1.0, side build at ~/llama-cpp-v010/)",
+  "compute_target": "T1_cuda_gpu",
+  "model": {
+    "name": "gemma-4-31B-it",
+    "path": "~/crossfire-models/gemma-4-31b-it-tqplus/Gemma-4-31B-it-Config-I.gguf",
+    "format": "GGUF Config-I (mixed: 327 tq4_1s + 56 q4_K + 28 q8_0 + 422 f32 tensors)",
+    "bpw": 5.28,
+    "size_gib": 18.87,
+    "source": "hf:thetom-ai/Gemma-4-31B-it-TQPlus (pre-quantized at tqp-v0.1.0)"
+  },
+  "run_config": {
+    "prompt": "The capital of France is",
+    "n_predict": 64,
+    "n_gpu_layers": 99,
+    "ctx_size": 4096,
+    "ctx_size_note": "auto-reduced from 262144 by llama_params_fit_impl to fit free VRAM",
+    "seed": 1,
+    "jinja_chat_template": true,
+    "no_warmup": true,
+    "stdin": "/dev/null (closes interactive REPL after first response)"
+  },
+  "metrics": {
+    "prefill_tok_per_sec": 139.45,
+    "prefill_ms_per_token": 7.17,
+    "prefill_tokens": 20,
+    "decode_tok_per_sec": 42.76,
+    "decode_ms_per_token": 23.39,
+    "decode_tokens": 63,
+    "total_tokens": 83,
+    "total_ms": 1664.92,
+    "load_ms": 176.64,
+    "sampling_ms": 12.16
+  },
+  "memory_breakdown_mib": {
+    "cuda0_total": 32606,
+    "cuda0_model": 28021,
+    "cuda0_context": 1520,
+    "cuda0_compute": 522,
+    "cuda0_used": 30064,
+    "cuda0_free": 343,
+    "cuda0_unaccounted": 2198,
+    "host_total": 1460,
+    "host_model": 1428,
+    "host_compute": 32
+  },
+  "output_sample": "<|channel>thought\n*   Prompt: \"The capital of France is\"\n    *   Intent: Completion of a factual statement.\n    *   Subject: Capital of France.\n\n    *   The capital of France is Paris.\n\n    *   Direct answer: \"Paris.\"\n    *   Full sentence:",
+  "raw_log": "results/raw/t0613_pc_p0_baseline.log",
+  "notes": [
+    "C0 reference for PC \u2014 P0 single-node, no compression beyond TQ4_1S quantization, no ANE, no distributed.",
+    "Required tqp-v0.1.0 binary (not v0.1.1) because the GGUF file-level tensor alignment shifted between fork tags despite block format being byte-identical.",
+    "Required llama-completion (not llama-cli, which rejected -no-cnv) and --jinja (Gemma 4 chat template is custom).",
+    "63 decode tokens is a small sample; consider re-running with a prompt that elicits longer output for tighter decode confidence intervals.",
+    "Compared to T-0614 Mac Q8_0 baseline: PC is 2.2x prefill (139.5 vs 64.1) and 2.9x decode (42.8 vs 14.9) on a model that is 37% smaller on disk."
+  ]
+}

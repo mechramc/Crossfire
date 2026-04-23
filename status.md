@@ -123,13 +123,15 @@ Phase 6 (Hardware Bring-Up And Calibration), Gemma 4 family:
    downloaded at `models/gemma-4-E2B-it/`; 31B is done on both nodes.
    Scout-first still applies for T-0612 (128-expert + 1-shared topology is
    not what the extractor was built for).
-2. Record the remaining P0 single-node baseline on PC (T-0613). T-0614 on Mac is
-   done. Session 23 unblocked T-0613 by proving Config-I loads/runs on the
-   5090 (95.7/37.7 tok/s prefill/decode at ctx 4096); the formal C0 baseline
-   should be re-recorded with proper chat-template formatting and the agreed
-   benchmark prompt set rather than the smoke prompt. Gemma 4 31B at Q8_0
-   (~33 GB) does not fit RTX 5090 single-node; PC P0 runs the 19 GB Config-I
-   GGUF (~30 GB on GPU including KV at ctx 4096).
+2. T-0613 (PC P0 single-node baseline) is now DONE Session 23: Gemma 4 31B
+   Config-I on RTX 5090 measured 139.45 tok/s prefill / 42.76 tok/s decode
+   with proper Gemma 4 chat template (`--jinja`); results JSON at
+   `results/t0613_pc_p0_baseline.json`. Vs Mac C0: 2.2x prefill, 2.9x decode
+   on a 37%-smaller model. Gemma 4 31B at Q8_0 (~33 GB) does not fit RTX
+   5090 single-node; PC P0 runs the 19 GB Config-I GGUF (~30 GB on GPU
+   including KV at ctx 4096). Consider re-running with a prompt set that
+   elicits longer output for tighter decode confidence intervals before
+   freezing C0 for the calibration matrix.
 3. Record P1 distributed baseline over WiFi at 8K/16K/32K (T-0617)
 4. Lock reward normalization constants from P1 baseline (T-0618)
 5. Policy calibrations P2-P6 (T-0619 through T-0625) -> C0-C7 matrix (T-0626)
