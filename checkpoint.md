@@ -5,6 +5,102 @@ Rule: update this file before every `git push`.
 
 ---
 
+## Session 23 - 2026-04-23: Close T-0607.pc — PC Gemma 4 31B Config-I smoke passed on RTX 5090
+
+### What was done
+
+- Closed T-0607.pc by smoke-testing the pre-quantized
+  `thetom-ai/Gemma-4-31B-it-TQPlus` (TurboQuant+ Config-I, 19 GB GGUF, mixed
+  TQ4_1S + Q4_K + Q8_0) on the WSL2 / RTX 5090 PC node.
+- Worked through three GGUF/binary compatibility issues:
+  1. **Tensor offset mismatch** between `tqp-v0.1.0` (the GGUF's build tag) and
+     `tqp-v0.1.1` (the previously built `vendor/llama.cpp/`). Block format is
+     byte-identical between tags but file-level alignment shifted, so v0.1.1
+     could not load the v0.1.0 file. Fix: built a side toolchain at
+     `~/llama-cpp-v010/build/` from `tqp-v0.1.0` with CUDA 13.2 and
+     `-DCMAKE_CUDA_ARCHITECTURES=120` (Blackwell/RTX 5090). v0.1.1 build is
+     kept intact for future re-quantization work.
+  2. **`-no-cnv` not supported by `llama-cli`** in the v0.1.0 toolchain. The
+     binary explicitly prints `please use llama-completion instead`. Switched
+     to `~/llama-cpp-v010/build/bin/llama-completion`.
+  3. **Custom chat template not supported by the default parser.** Without
+     `--jinja`, `llama-completion` terminates with
+     `std::runtime_error: this custom template is not supported, try using --jinja`.
+     Added `--jinja` to the smoke command line.
+- Final smoke command:
+  `~/llama-cpp-v010/build/bin/llama-completion -m .../Gemma-4-31B-it-Config-I.gguf --jinja -no-cnv -p "The capital of France is" -n 32 --n-gpu-layers 99 --seed 1`
+- Updated `tasks.md` to mark T-0607.pc as done and record Session 23 step 5 with
+  the full set of fixes and the measured perf.
+
+### Smoke results (Gemma 4 31B Config-I on RTX 5090, ctx 4096)
+
+| Metric         | Value                                                    |
+| -------------- | -------------------------------------------------------- |
+| Load time      | 4.42 s                                                   |
+| Prefill        | 95.7 tok/s  (5 toks @ 10.45 ms each)                     |
+| Decode         | 37.7 tok/s  (31 toks @ 26.54 ms each)                    |
+| CUDA0 used     | 30,064 MiB (28,021 model + 1,520 KV + 522 compute)       |
+| CUDA0 free     | 337 MiB                                                  |
+| GPU offload    | 61/61 layers                                             |
+| Context        | auto-reduced from 262,144 to 4,096 to fit free VRAM      |
+
+For comparison, T-0614 Mac M4 Max baseline (Gemma 4 31B Q8_0, 30 GB):
+prefill 64.1 / decode 14.9 tok/s. PC node is roughly 1.5x prefill / 2.5x decode
+on a model that is ~37% smaller on disk.
+
+### Caveats
+
+- The `-no-cnv` raw-completion output loops ("...France is France is France
+  is..."). That is expected for an instruction-tuned model when the chat
+  template is bypassed; a chat-mode run (`--jinja` without `-no-cnv`) produced
+  coherent Gemma 4 CoT output (`<|channel>thought ...`), but in that mode the
+  binary drops into interactive REPL after the prompt, which is fine for ad-hoc
+  use but does not produce a clean `--perf` line. The perf numbers above are
+  from the `-no-cnv` path; they are valid as throughput numbers because the
+  decode kernel does the same work either way, but T-0613 (PC P0 baseline)
+  should be re-recorded with proper chat formatting before being used for the
+  C0 row of the calibration matrix.
+- WSL2 + RTX 5090 driver shows ~31 GB used at idle when no processes are
+  running. This is a baseline reservation quirk in the current driver; it does
+  not actually consume VRAM and the smoke run was able to allocate 30 GB on top
+  of it without issue. Flagged for investigation if anything later needs the
+  full 32 GB of nominal VRAM.
+
+### Local files (gitignored, PC node only)
+
+- `~/crossfire-models/gemma-4-31B-it/` — 59 GB fp16 safetensors (kept for
+  future TQ4_1S re-quantization at v0.1.1)
+- `~/crossfire-models/gemma-4-31b-it-tqplus/Gemma-4-31B-it-Config-I.gguf` —
+  19 GB pre-quantized GGUF used in this smoke
+- `~/llama-cpp-v010/` — side `tqp-v0.1.0` toolchain build dir
+- `~/run_smoke.sh` — convenience launcher used in this session
+- `~/crossfire/.convertvenv/` — Python 3.12 venv with
+  `transformers 5.5.1`, `torch 2.6.0+cpu`, `numpy 1.26.4`, `safetensors 0.7.0`
+  (already documented in tasks.md T-0607.pc preamble)
+
+### Verification
+
+- Smoke perf line emitted by `llama-completion --perf` (see Smoke results
+  above); exit code 0; no CUDA errors.
+- `git pull` brought in Sessions 20-22 work (Flash-MoE scout wiring, Mac
+  C0 baseline, 26B-A4B HF download). Local Session 19 tasks.md edit was merged
+  with remote without losing either side: T-0607.mac kept remote DONE, T-0607.pc
+  kept the Session 19 detail and was re-marked DONE here, T-0612 / T-0612.pc /
+  T-0612.repo kept all three.
+- Tests / lint not re-run in this session (no Python source changes; only doc
+  edits and a remote-node smoke).
+
+### State at end of session
+
+- T-0607.pc is closed.
+- T-0613 (PC P0 single-node baseline) is now unblocked but not started.
+- Side toolchain `~/llama-cpp-v010/build/` is the binary to use for any future
+  smoke or perf work against a v0.1.0-built GGUF.
+- T-0612.pc (PC vanilla TQ4_1S of 26B-A4B) is the next remaining PC model-prep
+  task; still requires the 52 GB HF download on the PC node before quantization.
+
+---
+
 ## Session 22 - 2026-04-22: End-of-day tracker sync after 26B-A4B download
 
 ### What was done

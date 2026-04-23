@@ -1,8 +1,8 @@
 # CROSSFIRE-X Status
 
-Last updated: 2026-04-22
+Last updated: 2026-04-23
 Branch: main
-Tracker state: software-layer tasks closed; Phase 6 calibration and model-prep work remain. T-0601 (PC), T-0602 (Mac), and T-0606 (active WiFi discovery path) are done; EXO PC is cluster Master, Mac is Worker. T-0609a Gemma 4 E2B chunked CoreML engine DONE: `src/crossfire/ane/gemma4_chunked.py` loads 3 stateful chunks (MLState API), generates coherent text ("Paris" for "The capital of France is"), measured 42.98 tok/s decode / 138.9 ms TTFT on M4 Max ANE. T-0610 Rustane and the Mac half of T-0611 are already complete. Project venv migrated to Python 3.13.12 (coremltools 9.0 has no working native wheel for 3.14). WiFi is the active interconnect; T-0603/T-0604/T-0605 remain optional future TB4/USB4 work if WiFi throughput proves insufficient, but they are not current blockers.
+Tracker state: software-layer tasks closed; Phase 6 calibration and model-prep work remain. T-0601 (PC), T-0602 (Mac), and T-0606 (active WiFi discovery path) are done; EXO PC is cluster Master, Mac is Worker. T-0607.mac and T-0607.pc are both done — Mac has fp16 safetensors + Q8_0 GGUF, PC has Config-I (TQ4_1S/Q4_K/Q8_0 mixed) GGUF and a working `tqp-v0.1.0` CUDA toolchain at `~/llama-cpp-v010/`. PC smoke (Session 23): Gemma 4 31B Config-I on RTX 5090 measured 95.7 tok/s prefill / 37.7 tok/s decode, 30,064 MiB VRAM, 61/61 layers offloaded. T-0609a Gemma 4 E2B chunked CoreML engine DONE: `src/crossfire/ane/gemma4_chunked.py` loads 3 stateful chunks (MLState API), generates coherent text ("Paris" for "The capital of France is"), measured 42.98 tok/s decode / 138.9 ms TTFT on M4 Max ANE. T-0610 Rustane and the Mac half of T-0611 are already complete. Project venv migrated to Python 3.13.12 (coremltools 9.0 has no working native wheel for 3.14). WiFi is the active interconnect; T-0603/T-0604/T-0605 remain optional future TB4/USB4 work if WiFi throughput proves insufficient, but they are not current blockers.
 
 ## Summary
 
@@ -56,10 +56,12 @@ docs use `CROSSFIRE-X`, while some code/history still refer to `CROSSFIRE v2`.
 
 ## Not Started
 
-- PC-side dense model prep and Mac-side MoE extraction work (remaining pieces
-  of T-0607 and T-0612). Repo-side T-0612 scout tooling is implemented and the
-  Gemma 4 26B-A4B HF weights are now downloaded locally; the remaining blocker
-  is the actual extractor validation run.
+- PC-side MoE model prep (T-0612.pc, vanilla TQ4_1S of Gemma 4 26B-A4B for
+  RTX 5090 single-node baselines) and Mac-side MoE extraction work
+  (T-0612 Flash-MoE sidecar). Repo-side T-0612 scout tooling is implemented
+  and the Gemma 4 26B-A4B HF weights are downloaded locally on the Mac;
+  remaining blockers are the actual Mac extractor validation run and the
+  PC-side download + quantize for T-0612.pc.
 - Calibration runs for every policy (T-0613 through T-0626)
 - Orion Forge serving (Phase 7)
 - Textual dashboard and final evaluation deliverables (Phase 8)
@@ -116,13 +118,18 @@ docs use `CROSSFIRE-X`, while some code/history still refer to `CROSSFIRE v2`.
 ## Immediate Next Work
 
 Phase 6 (Hardware Bring-Up And Calibration), Gemma 4 family:
-1. Finish the remaining remote-node model prep: T-0607.pc and T-0612. E2B already
-   downloaded at `models/gemma-4-E2B-it/`. Scout-first still applies for T-0612
-   (26B-A4B Flash-MoE sidecar extraction; 128-expert + 1-shared topology is
+1. Finish the remaining remote-node model prep: T-0612.pc (PC vanilla TQ4_1S of
+   26B-A4B) and T-0612 (Mac Flash-MoE sidecar extraction). E2B already
+   downloaded at `models/gemma-4-E2B-it/`; 31B is done on both nodes.
+   Scout-first still applies for T-0612 (128-expert + 1-shared topology is
    not what the extractor was built for).
-2. Record the remaining P0 single-node baseline on PC (T-0613). T-0614 on Mac is done. Note:
-   Gemma 4 31B at Q8_0 (~33 GB) does not fit RTX 5090 single-node; PC P0
-   must run TQ4_1S (~23 GB) or skip to distributed.
+2. Record the remaining P0 single-node baseline on PC (T-0613). T-0614 on Mac is
+   done. Session 23 unblocked T-0613 by proving Config-I loads/runs on the
+   5090 (95.7/37.7 tok/s prefill/decode at ctx 4096); the formal C0 baseline
+   should be re-recorded with proper chat-template formatting and the agreed
+   benchmark prompt set rather than the smoke prompt. Gemma 4 31B at Q8_0
+   (~33 GB) does not fit RTX 5090 single-node; PC P0 runs the 19 GB Config-I
+   GGUF (~30 GB on GPU including KV at ctx 4096).
 3. Record P1 distributed baseline over WiFi at 8K/16K/32K (T-0617)
 4. Lock reward normalization constants from P1 baseline (T-0618)
 5. Policy calibrations P2-P6 (T-0619 through T-0625) -> C0-C7 matrix (T-0626)
