@@ -5,6 +5,42 @@ Rule: update this file before every `git push`.
 
 ---
 
+## Session 21 - 2026-04-22: Wire Flash-MoE scout/extract path for T-0612
+
+### What was done
+
+- Replaced the Flash-MoE runtime stubs in `src/crossfire/flashmoe/runtime.py`
+  with real wrappers around the vendored Anemll tooling.
+- `FlashMoERuntime.extract_sidecar()` now calls
+  `vendor/anemll-flash-llama.cpp/tools/flashmoe-sidecar/flashmoe_sidecar.py`
+  to extract a sidecar from a MoE GGUF and optionally verify it.
+- Added `inspect_sidecar()` and `verify_sidecar()` wrappers so the repo can
+  probe Gemma 4 26B-A4B extractor compatibility before committing to a full
+  Flash-MoE run.
+- Implemented `run_inference()` against the built `llama-cli` and parse the
+  `--perf` output into `FlashMoEStats` (hit rate, pread count, expert loads,
+  decode tok/s) for smoke tests once the model exists locally.
+- Added `scripts/run_flashmoe_scout.py` as a repo-level T-0612 entrypoint:
+  inspect -> optional extract/verify -> optional smoke inference.
+- Added test coverage in `tests/test_flashmoe.py` for output parsing, binary
+  execution wrapping, and sidecar tool invocation.
+
+### Verification
+
+- `./.venv/bin/pytest`: `165 passed, 5 skipped`
+- `./.venv/bin/ruff check .`: clean
+- `./.venv/bin/ruff format --check .`: clean
+
+### State at end of session
+
+- Repo-side support for T-0612 now exists and is verified.
+- T-0612 itself is still not complete because `models/` does not yet contain a
+  Gemma 4 26B-A4B GGUF to inspect/extract against.
+- T-0617 remains blocked on cross-node runtime/model availability; no fake
+  distributed baseline was recorded.
+
+---
+
 ## Session 20 - 2026-04-22: Make Gemma 4 CoreML real-bundle tests sandbox-safe
 
 ### What was done

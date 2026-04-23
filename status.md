@@ -38,6 +38,11 @@ docs use `CROSSFIRE-X`, while some code/history still refer to `CROSSFIRE v2`.
 - `scripts/setup_mac.sh`, `scripts/setup_pc.sh` -- Thunderbolt IP bridge guidance,
   iperf3 probe, nc reachability check; EXO installed from source via uv
 - `scripts/build_flash_moe.sh` -- cross-platform anemll-flash-llama.cpp build automation
+- `src/crossfire/flashmoe/runtime.py` -- wraps the vendored Flash-MoE sidecar tool
+  (`inspect` / `extract` / `verify`) and parses `llama-cli --perf` output into
+  `FlashMoEStats` for smoke runs
+- `scripts/run_flashmoe_scout.py` -- repo entrypoint for T-0612 scout work
+  against Gemma 4 26B-A4B once the GGUF is present locally
 
 ### Tests
 - `tests/test_ane.py`, `tests/test_pipeline.py`, `tests/test_metrics.py`
@@ -49,6 +54,8 @@ docs use `CROSSFIRE-X`, while some code/history still refer to `CROSSFIRE v2`.
 ## Not Started
 
 - PC-side dense model prep and MoE extraction work (remaining pieces of T-0607 and T-0612)
+  Repo-side T-0612 scout tooling is now implemented; the remaining blocker is
+  the actual Gemma 4 26B-A4B GGUF/model acquisition and extraction run.
 - Calibration runs for every policy (T-0613 through T-0626)
 - Orion Forge serving (Phase 7)
 - Textual dashboard and final evaluation deliverables (Phase 8)
@@ -90,7 +97,7 @@ docs use `CROSSFIRE-X`, while some code/history still refer to `CROSSFIRE v2`.
 
 ## Verification
 
-- `pytest`: clean for current batch in the Codex sandbox: 162 passed, 5 skipped.
+- `pytest`: clean for current batch in the Codex sandbox: 165 passed, 5 skipped.
   The skipped tests are the real-bundle `tests/test_gemma4_chunked.py` cases,
   which now detect sandbox-limited CoreML execution-plan availability and skip
   instead of failing. The same file still passes unsandboxed on this Mac
