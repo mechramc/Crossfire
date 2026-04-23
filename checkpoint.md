@@ -5,6 +5,89 @@ Rule: update this file before every `git push`.
 
 ---
 
+## Session 23 (cont.) - 2026-04-23: Close T-0612.pc — PC Gemma 4 26B-A4B TQ4_1S MoE smoke passed on RTX 5090
+
+### What was done
+
+- Closed T-0612.pc by downloading, converting, quantizing, and smoke-testing
+  `google/gemma-4-26B-A4B-it` (MoE: 128 experts + 1 shared expert, 4 B active
+  parameters per token) on the WSL2 / RTX 5090 PC node.
+- Pipeline (one shot, sequential):
+  1. **HF download** — `hf download google/gemma-4-26B-A4B-it
+     --local-dir ~/crossfire-models/gemma-4-26B-A4B-it`. 49 GB across two
+     safetensors shards (model-00001-of-00002.safetensors at 49.9 GB,
+     model-00002-of-00002.safetensors at 1.7 GB). License accepted via
+     existing HF token. Took ~48 min over WiFi (no `hf_transfer` available
+     because the convertvenv is uv-managed and has no `pip`).
+  2. **HF → fp16 GGUF** — `~/crossfire/.convertvenv/bin/python
+     ~/llama-cpp-v010/convert_hf_to_gguf.py ... --outtype f16`. n_tensors=658,
+     output 50.5 GB (matches 16.01 BPW). Sustained 500–700 MB/s during
+     write. Conversion log saved to `/tmp/t0612pc_convert.log`.
+  3. **TQ4_1S quantize** — `~/llama-cpp-v010/build/bin/llama-quantize
+     ... TQ4_1S`. 48,150 MiB → 15,214 MiB (5.06 BPW, 3.16x compression).
+     Total quantize time 198 s (~3.3 min). All 658 tensors handled cleanly,
+     including the MoE expert tensors (`ffn_*_exps`).
+  4. **Smoke** — same `llama-completion --jinja </dev/null` recipe used for
+     T-0613, with `-n 64 --n-gpu-layers 99 --seed 1 --no-warmup`.
+- Reused the v0.1.0 side toolchain at `~/llama-cpp-v010/` built during T-0607.pc;
+  no new binary work required.
+
+### Smoke results (Gemma 4 26B-A4B TQ4_1S on RTX 5090, ctx auto-fit, n_predict 64)
+
+| Metric         | Value                                                    |
+| -------------- | -------------------------------------------------------- |
+| Load time      | 185.68 ms                                                |
+| Prefill        | 148.96 tok/s (21 toks @ 6.71 ms each)                    |
+| Decode         | **157.60 tok/s** (30 toks @ 6.35 ms each)                |
+| Total          | 412 ms / 51 tokens                                       |
+| Sampling       | 5.66 ms (52 tokens)                                      |
+| VRAM (CUDA0)   | 29,749 MiB used of 32,606 (532 free)                     |
+| VRAM breakdown | 25,430 model + 3,750 KV + 569 compute + 2,324 unaccted   |
+| Output         | "Paris" (coherent, after a brief CoT block)              |
+
+### Headline finding
+
+Decode at **157.6 tok/s** is **3.7x faster** than the dense Gemma 4 31B
+Config-I baseline on the same hardware (T-0613: 42.76 tok/s). This validates
+the MoE 4 B-active routing path on RTX 5090 — the model is 26 B parameters
+nominal but only ~4 B participate per token, so single-node decode latency
+tracks the active-parameter count, not the total.
+
+### Caveats
+
+- Custom chat template still requires `--jinja` (same as T-0607.pc / T-0613).
+- Model uses ConditionalGeneration (multimodal) HF class; converter handled
+  the text-only weight subset cleanly. Vision/audio paths not exercised.
+- Smoke is single-prompt, 30 decoded tokens — too short for a tight
+  steady-state decode confidence interval. Treat 157 tok/s as the upper
+  bound of what a follow-up calibration sweep should expect, not as the
+  calibration number itself.
+
+### Local files (PC node, gitignored)
+
+- `~/crossfire-models/gemma-4-26B-A4B-it/` (49 GB, HF safetensors + tokenizer)
+- `~/crossfire-models/gemma-4-26B-A4B-fp16.gguf` (48 GB, intermediate)
+- `~/crossfire-models/gemma-4-26B-A4B-TQ4_1S.gguf` (15 GB, smoke target)
+- `/tmp/t0612pc_dl.log`, `/tmp/t0612pc_convert.log`,
+  `/tmp/t0612pc_quantize.log`, `/tmp/t0612pc_smoke.log`
+
+### Repo files
+
+- `results/raw/t0612pc_smoke.log` (gitignored)
+- `tasks.md` — T-0612.pc marked `[x]` DONE Session 23 with full pipeline metrics
+- `status.md` — tracker state updated with T-0612.pc closure and headline 3.7x decode finding
+- `checkpoint.md` — this entry
+
+### Follow-up
+
+- T-0612 (Mac slot-bank extractor for Flash-MoE NVMe streaming) is still open
+  and is the canonical Phase-6-blocking MoE work. The PC TQ4_1S build is the
+  C0 reference partner to it, not a substitute.
+- HF token in `~/.cache/huggingface/token` was reused from prior session; same
+  rotation reminder still applies whenever convenient.
+
+---
+
 ## Session 23 - 2026-04-23: Close T-0607.pc — PC Gemma 4 31B Config-I smoke passed on RTX 5090
 
 ### What was done

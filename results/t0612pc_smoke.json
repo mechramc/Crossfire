@@ -1,0 +1,94 @@
+{
+  "task_id": "T-0612.pc",
+  "description": "PC vanilla TQ4_1S quantization + smoke test of Gemma 4 26B-A4B (MoE, 4B active) on RTX 5090",
+  "timestamp_utc": "2026-04-23T19:09:59+00:00",
+  "node": "pc",
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 5090",
+    "compute_capability": "12.0 (Blackwell)",
+    "vram_total_mib": 32606,
+    "host": "WSL2 Ubuntu on Windows 11"
+  },
+  "execution_policy": "P0",
+  "ablation_config": "C0",
+  "backend": "llama-completion (TheTom/llama-cpp-turboquant @ tqp-v0.1.0, side build at ~/llama-cpp-v010/)",
+  "compute_target": "T1_cuda_gpu",
+  "model": {
+    "name": "gemma-4-26B-A4B-it",
+    "path": "~/crossfire-models/gemma-4-26B-A4B-TQ4_1S.gguf",
+    "format": "GGUF TQ4_1S (single-format quantization)",
+    "bpw": 5.06,
+    "size_gib": 14.86,
+    "n_tensors": 658,
+    "moe": {
+      "total_params_billions": 26.5,
+      "active_params_per_token_billions": 4.0,
+      "experts_per_layer": 128,
+      "shared_experts": 1
+    },
+    "source": "hf:google/gemma-4-26B-A4B-it (fp16 safetensors) -> convert_hf_to_gguf.py --outtype f16 -> llama-quantize TQ4_1S"
+  },
+  "pipeline": {
+    "hf_download_size_gib": 49,
+    "hf_download_duration_sec": 2880,
+    "fp16_gguf_size_gib": 48.0,
+    "fp16_total_bpw": 16.01,
+    "tq4_1s_size_gib": 14.86,
+    "tq4_1s_bpw": 5.06,
+    "compression_ratio": 3.16,
+    "quantize_duration_sec": 198
+  },
+  "run_config": {
+    "prompt": "The capital of France is",
+    "n_predict": 64,
+    "n_gpu_layers": 99,
+    "ctx_size": 176640,
+    "ctx_size_note": "auto-fit by llama_params_fit_impl",
+    "seed": 1,
+    "jinja_chat_template": true,
+    "no_warmup": true,
+    "stdin": "/dev/null"
+  },
+  "metrics": {
+    "prefill_tok_per_sec": 148.96,
+    "prefill_ms_per_token": 6.71,
+    "prefill_tokens": 21,
+    "decode_tok_per_sec": 157.60,
+    "decode_ms_per_token": 6.35,
+    "decode_tokens": 30,
+    "total_tokens": 51,
+    "total_ms": 412.02,
+    "load_ms": 185.68,
+    "sampling_ms": 5.66
+  },
+  "memory_breakdown_mib": {
+    "cuda0_total": 32606,
+    "cuda0_model": 25430,
+    "cuda0_context": 3750,
+    "cuda0_compute": 569,
+    "cuda0_used": 29749,
+    "cuda0_free": 532,
+    "cuda0_unaccounted": 2324,
+    "host_total": 936,
+    "host_model": 577,
+    "host_compute": 359
+  },
+  "output_sample": "<|channel>thought\n\"The capital of France is\"\nThe user is looking for the name of the capital city of France.\nParis.<channel|>Paris",
+  "raw_log": "results/raw/t0612pc_smoke.log",
+  "comparisons": {
+    "vs_t0613_pc_dense_31b": {
+      "prefill_speedup": 1.07,
+      "decode_speedup": 3.69,
+      "model_size_ratio": 0.79,
+      "note": "MoE 4B-active routing yields 3.7x decode vs dense 31B at similar disk footprint"
+    }
+  },
+  "notes": [
+    "C0 reference for PC MoE — P0 single-node, no compression beyond TQ4_1S quantization, no Flash-MoE slot-bank, no distributed.",
+    "Reused tqp-v0.1.0 side toolchain at ~/llama-cpp-v010/ from T-0607.pc.",
+    "30 decode tokens is a small sample; consider a longer-output prompt for tighter decode confidence intervals.",
+    "Source HF class is Gemma4ForConditionalGeneration (multimodal); converter handled text-only weight subset cleanly. Vision/audio not exercised.",
+    "All 658 tensors quantized cleanly including MoE expert tensors (ffn_gate_up_exps / ffn_down_exps).",
+    "VRAM headroom is tight (532 MiB free of 32,606); a longer context or batch may require KV reduction (TriAttention) or quantization headroom."
+  ]
+}
