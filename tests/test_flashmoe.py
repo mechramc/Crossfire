@@ -156,8 +156,10 @@ def test_cli_args_include_mode_and_topk():
         slot_bank=SlotBankConfig(topk=5),
     )
     args = rt.build_cli_args(Path("/models/gemma.gguf"))
-    assert "--moe-mode=resident-bank" in args
-    assert "--moe-topk=5" in args
+    assert "--moe-mode" in args
+    assert "resident-bank" in args
+    assert "--moe-topk" in args
+    assert "5" in args
 
 
 def test_cli_args_context_size_passthrough():
@@ -253,11 +255,15 @@ def test_run_inference_executes_binary_and_parses_output(
         check: bool,
         capture_output: bool,
         text: bool,
+        stdin: object | None = None,
     ) -> subprocess.CompletedProcess[str]:
         assert str(binary) == args[0]
         assert "--perf" in args
+        assert "--jinja" in args
+        assert "--single-turn" in args
         assert "-p" in args
         assert "-n" in args
+        assert stdin is subprocess.DEVNULL
         return subprocess.CompletedProcess(
             args=args,
             returncode=0,
@@ -305,6 +311,7 @@ def test_extract_sidecar_invokes_vendored_tool(tmp_path: Path, monkeypatch: pyte
         check: bool,
         capture_output: bool,
         text: bool,
+        stdin: object | None = None,
     ) -> subprocess.CompletedProcess[str]:
         calls.append(args)
         return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
@@ -329,6 +336,7 @@ def test_inspect_sidecar_returns_json_payload(tmp_path: Path, monkeypatch: pytes
         check: bool,
         capture_output: bool,
         text: bool,
+        stdin: object | None = None,
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(
             args=args,

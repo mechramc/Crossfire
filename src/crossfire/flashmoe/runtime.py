@@ -75,6 +75,7 @@ class FlashMoERuntime:
             check=False,
             capture_output=True,
             text=True,
+            stdin=subprocess.DEVNULL,
         )
 
     @classmethod
@@ -136,8 +137,10 @@ class FlashMoERuntime:
             "99",
             "-fa",
             "on",
-            f"--moe-mode={self.mode.value}",
-            f"--moe-topk={self.slot_bank.topk}",
+            "--moe-mode",
+            self.mode.value,
+            "--moe-topk",
+            str(self.slot_bank.topk),
         ]
 
         if self.sidecar is not None:
@@ -166,9 +169,8 @@ class FlashMoERuntime:
 
         args = self.build_cli_args(model, context_size=context_size)
         args += [
-            "--simple-io",
-            "--color",
-            "off",
+            "--jinja",
+            "--single-turn",
             "--perf",
             "-p",
             prompt,

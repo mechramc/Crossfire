@@ -1,0 +1,125 @@
+{
+  "task": "T-0612",
+  "session": 23,
+  "date": "2026-04-23",
+  "node": "mac-m4-max-64gb",
+  "model": {
+    "repo": "google/gemma-4-26B-A4B-it",
+    "gguf_path": "models/gemma-4-26B-A4B-fp16.gguf",
+    "gguf_bytes": 50505134752,
+    "gguf_sha256_prefix": "d73341c5fb1e",
+    "dtype": "fp16",
+    "arch": "gemma4",
+    "expert_count": 128,
+    "expert_used_count": 8,
+    "n_layers": 30,
+    "moe_intermediate_size": 704,
+    "dense_intermediate_size": 2112
+  },
+  "conversion": {
+    "source": "models/gemma-4-26B-A4B-it/ (HF bf16 safetensors, 51.6 GiB)",
+    "tool": "vendor/llama.cpp/convert_hf_to_gguf.py",
+    "venv": ".venv-convert (Python 3.13.12, transformers 5.5.1, numpy 1.26.4, gguf 0.18.0)",
+    "n_tensors": 658,
+    "output_bytes": "50.5 GB",
+    "wall_time_sec": 120,
+    "log": "results/raw/t0612_convert_26B_A4B_fp16.log"
+  },
+  "inspect": {
+    "tool": "vendor/anemll-flash-llama.cpp/tools/flashmoe-sidecar/flashmoe_sidecar.py",
+    "gemma4_aware": true,
+    "routed_families_seen": ["ffn_down_exps", "ffn_gate_up_exps"],
+    "shared_families_seen": [],
+    "shared_expert_topology": "Gemma 4 26B-A4B has 128 routed experts + a dense shared FFN using standard ffn_down/gate/up.weight names (not ffn_*_shexp). --include-shared finds no matching tensors, which is correct for this model.",
+    "tensors_in_sidecar_scope": 60,
+    "sidecar_scope_bytes": 45675970560,
+    "log": "results/raw/t0612_scout_inspect.log"
+  },
+  "extract": {
+    "output_dir": "results/flashmoe_sidecar/gemma-4-26B-A4B",
+    "manifest": "results/flashmoe_sidecar/gemma-4-26B-A4B/manifest.json",
+    "schema_version": 1,
+    "sidecar_kind": "flashmoe_gguf",
+    "layout": "layer_major_whole_tensor",
+    "n_layer_bins": 30,
+    "n_manifest_entries": 60,
+    "sidecar_bytes": 46015758336,
+    "bytes_per_expert_ffn_down": 3964928,
+    "bytes_per_expert_ffn_gate_up": 7929856,
+    "verify_byte_match": "passed",
+    "log": "results/raw/t0612_scout_extract.log"
+  },
+  "smoke_stock_baseline": {
+    "binary": "vendor/anemll-flash-llama.cpp/build/bin/llama-completion",
+    "mode": "stock",
+    "topk": 0,
+    "ctx_size": 2048,
+    "prompt": "The capital of France is",
+    "max_tokens": 16,
+    "prompt_tok_s": 57.14,
+    "decode_tok_s": 49.46,
+    "load_ms": 1884.55,
+    "metal_mem_used_mib": 48444,
+    "metal_mem_free_mib": 9127,
+    "log": "results/raw/t0612_stock_smoke.log"
+  },
+  "smoke_slot_bank": {
+    "binary": "vendor/anemll-flash-llama.cpp/build/bin/llama-completion",
+    "mode": "slot-bank",
+    "topk": 8,
+    "slot_bank_size": 16,
+    "prefetch_temporal": true,
+    "ctx_size": 2048,
+    "prompt": "The capital of France is",
+    "max_tokens": 32,
+    "prompt_tok_s": 5.28,
+    "decode_tok_s": 7.17,
+    "load_ms": 4316.27,
+    "slot_bank_hit_rate": 0.579,
+    "prefetch_hit_rate": 0.978,
+    "expert_refs": 13032,
+    "preads": 43856,
+    "bytes_streamed_gib": 60.73,
+    "routed_bytes_per_token_gib": 1.10,
+    "metal_mem_used_mib": 10329,
+    "metal_mem_free_mib": 48650,
+    "per_token_time_split": {
+      "routing_ms": 0.02,
+      "source_io_ms": 372.54,
+      "upload_ms": 17.33,
+      "total_ms": 389.94
+    },
+    "per_layer_hit_rate_range": "40.2% - 56.6% (sampled layers 0, 1, 2, 5, 23, 25, 27, 28)",
+    "log": "results/raw/t0612_slotbank_smoke.log"
+  },
+  "mac_baseline_comparison": {
+    "gemma-4-31B-fp16 (T-0614, Q8_0)": "14.9 tok/s decode",
+    "gemma-4-E2B (T-0609a, CoreML chunked)": "42.98 tok/s decode",
+    "gemma-4-26B-A4B stock fp16 (new)": "49.46 tok/s decode",
+    "gemma-4-26B-A4B slot-bank (new)": "7.17 tok/s decode (78% VRAM reduction)"
+  },
+  "runtime_wrapper_fixes": [
+    "runtime.py:139-142 -- split --moe-mode and --moe-topk from '=' to space-separated (binary arg parser requires)",
+    "runtime.py:73-78 -- added stdin=subprocess.DEVNULL so llama-cli/llama-completion do not enter interactive REPL inheriting caller TTY",
+    "runtime.py:170-178 -- dropped --simple-io/--color off (llama-cli UI flags, not supported by llama-completion); added --jinja (required for Gemma 4 chat template) and --single-turn",
+    "run_flashmoe_scout.py -- default binary changed from llama-cli to llama-completion; this fork's llama-cli forces interactive mode and cannot be disabled"
+  ],
+  "environment": {
+    "vendor_llama_cpp_commit": "4d24ad87b8ed2ad160809af41930f1e04b83f234",
+    "vendor_anemll_flash_llama_cpp_commit": "64e25509bb48a6104720ba1021197d32f677f653",
+    "build_id_reported": "b8456-64e25509b",
+    "metal_gpu": "Apple M4 Max (MTLGPUFamilyApple9 / Metal4)",
+    "metal_wired_limit_mib": 58982
+  },
+  "conclusions": {
+    "extractor_compatibility": "CLEAN -- schema-driven extractor handles Gemma 4 fused ffn_gate_up_exps natively; no patches needed to anemll-flash-llama.cpp",
+    "runtime_compatibility": "Gemma 4 runtime path works in both stock and slot-bank modes; slot-bank is I/O-bound (95.5% per-token time in source pread) at iosplit=4 and async=off",
+    "c7_ablation_data_captured": true,
+    "p0_mac_moe_baseline_captured": true,
+    "followups_non_blocking": [
+      "async=on, preads=on, batchrd=on may reduce source I/O time; --moe-cache-io-split tuning is the next obvious experiment",
+      "larger --moe-slot-bank (48 or 64 slots) should raise hit rate at the cost of Metal memory (each +16 slots ~= 5.3 GiB)",
+      "Orion Forge serving (Phase 7) can reuse the same inspect/extract/verify pipeline verbatim"
+    ]
+  }
+}

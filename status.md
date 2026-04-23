@@ -2,7 +2,7 @@
 
 Last updated: 2026-04-23
 Branch: main
-Tracker state: software-layer tasks closed; Phase 6 calibration and model-prep work remain. T-0601 (PC), T-0602 (Mac), and T-0606 (active WiFi discovery path) are done; EXO PC is cluster Master, Mac is Worker. T-0607.mac/pc both done. T-0613 PC P0 baseline (C0 reference) recorded: Gemma 4 31B Config-I on RTX 5090, prefill 139.45 tok/s / decode 42.76 tok/s. T-0612.pc DONE Session 23: Gemma 4 26B-A4B downloaded (49 GB HF), converted to fp16 GGUF (50.5 GB, n_tensors=658), quantized to TQ4_1S (15 GB, 5.06 BPW). RTX 5090 smoke: prefill **148.96 tok/s** / decode **157.60 tok/s** — 3.7x faster than dense 31B due to MoE 4B-active routing. T-0609a Gemma 4 E2B chunked CoreML engine DONE: `src/crossfire/ane/gemma4_chunked.py` loads 3 stateful chunks (MLState API), generates coherent text, measured 42.98 tok/s decode / 138.9 ms TTFT on M4 Max ANE. T-0610 Rustane and the Mac half of T-0611 are already complete. Project venv migrated to Python 3.13.12 (coremltools 9.0 has no working native wheel for 3.14). WiFi is the active interconnect; T-0603/T-0604/T-0605 remain optional future TB4/USB4 work if WiFi throughput proves insufficient, but they are not current blockers.
+Tracker state: software-layer tasks closed; Phase 6 calibration work remains but all model-prep for Gemma 4 dense + MoE is now done on both nodes. T-0601 (PC), T-0602 (Mac), and T-0606 (active WiFi discovery path) are done; EXO PC is cluster Master, Mac is Worker. **T-0607.mac/pc both done** — Mac has fp16 safetensors + Q8_0 GGUF, PC has Config-I (TQ4_1S/Q4_K/Q8_0 mixed) GGUF + tqp-v0.1.0 CUDA toolchain at `~/llama-cpp-v010/`. **T-0613 PC P0 baseline** (C0 reference) recorded: Gemma 4 31B Config-I on RTX 5090, prefill 139.45 tok/s / decode 42.76 tok/s. **T-0612.pc DONE Session 23**: Gemma 4 26B-A4B downloaded (49 GB HF), converted to fp16 GGUF (50.5 GB, 658 tensors), quantized to TQ4_1S (15 GB, 5.06 BPW). RTX 5090 smoke: **prefill 148.96 tok/s / decode 157.60 tok/s** — 3.7x faster than dense 31B due to MoE 4B-active routing. **T-0612 (Mac Flash-MoE extractor validation) CLOSED Session 24**: same fp16 GGUF on Mac, sidecar extracted + byte-verified (46.0 GB, 30 layers, 60 entries), stock Gemma 4 26B-A4B fp16 decode **49.46 tok/s at 48.4 GB Metal**, slot-bank (16 slots, topk=8) decode **7.17 tok/s at 10.3 GB Metal with 57.9% slot-bank hit rate + 97.8% prefetch hit rate**; runtime wrapper patched to use `llama-completion` + `--jinja --single-turn` + closed stdin (the fork's `llama-cli` is not usable for batch completions). T-0609a Gemma 4 E2B chunked CoreML engine DONE: `src/crossfire/ane/gemma4_chunked.py` loads 3 stateful chunks (MLState API), generates coherent text ("Paris" for "The capital of France is"), 42.98 tok/s decode / 138.9 ms TTFT on M4 Max ANE. T-0610 Rustane and Mac half of T-0611 complete. Project venv on Python 3.13.12 (coremltools 9.0 has no working native wheel for 3.14). WiFi is the active interconnect; T-0603/T-0604/T-0605 remain optional future TB4/USB4 work if WiFi throughput proves insufficient, but they are not current blockers.
 
 ## Summary
 
@@ -56,11 +56,10 @@ docs use `CROSSFIRE-X`, while some code/history still refer to `CROSSFIRE v2`.
 
 ## Not Started
 
-- Mac-side MoE extraction work (T-0612 Flash-MoE sidecar). Repo-side T-0612
-  scout tooling is implemented and the Gemma 4 26B-A4B HF weights are
-  downloaded locally on the Mac; remaining blocker is the actual Mac
-  extractor validation run. PC-side T-0612.pc is now done (TQ4_1S GGUF
-  built, smoke passed at 157.6 tok/s decode on RTX 5090).
+- All model-prep for Gemma 4 dense + MoE is now done on both nodes. PC has
+  the TQ4_1S 26B-A4B GGUF (T-0612.pc, Session 23). Mac has the fp16 GGUF
+  + extracted Flash-MoE sidecar (T-0612, Session 24). T-0607.pc closed in
+  Session 23. Next remaining PC work is calibration, not model prep.
 - Calibration runs for every policy (T-0613 through T-0626)
 - Orion Forge serving (Phase 7)
 - Textual dashboard and final evaluation deliverables (Phase 8)
@@ -117,24 +116,22 @@ docs use `CROSSFIRE-X`, while some code/history still refer to `CROSSFIRE v2`.
 ## Immediate Next Work
 
 Phase 6 (Hardware Bring-Up And Calibration), Gemma 4 family:
-1. Finish the remaining remote-node model prep: T-0612.pc (PC vanilla TQ4_1S of
-   26B-A4B) and T-0612 (Mac Flash-MoE sidecar extraction). E2B already
-   downloaded at `models/gemma-4-E2B-it/`; 31B is done on both nodes.
-   Scout-first still applies for T-0612 (128-expert + 1-shared topology is
-   not what the extractor was built for).
-2. T-0613 (PC P0 single-node baseline) is now DONE Session 23: Gemma 4 31B
-   Config-I on RTX 5090 measured 139.45 tok/s prefill / 42.76 tok/s decode
-   with proper Gemma 4 chat template (`--jinja`); results JSON at
-   `results/t0613_pc_p0_baseline.json`. Vs Mac C0: 2.2x prefill, 2.9x decode
-   on a 37%-smaller model. Gemma 4 31B at Q8_0 (~33 GB) does not fit RTX
-   5090 single-node; PC P0 runs the 19 GB Config-I GGUF (~30 GB on GPU
-   including KV at ctx 4096). Consider re-running with a prompt set that
-   elicits longer output for tighter decode confidence intervals before
-   freezing C0 for the calibration matrix.
-3. Record P1 distributed baseline over WiFi at 8K/16K/32K (T-0617)
-4. Lock reward normalization constants from P1 baseline (T-0618)
+1. Finish the remaining remote-node MoE model prep: T-0612.pc (PC vanilla
+   TQ4_1S of 26B-A4B). Mac side of T-0607 / T-0608 / T-0612 are done;
+   T-0607.pc and T-0613 closed in Session 23 with Gemma 4 31B Config-I on
+   RTX 5090 measuring 139.45 tok/s prefill / 42.76 tok/s decode with
+   proper Gemma 4 chat template (`--jinja`) — results JSON at
+   `results/t0613_pc_p0_baseline.json`. Vs Mac C0: 2.2x prefill, 2.9x
+   decode on a 37%-smaller model. Consider re-running T-0613 with a prompt
+   set that elicits longer output for tighter decode confidence intervals
+   before freezing C0 for the calibration matrix.
+2. Record P1 distributed baseline over WiFi at 8K/16K/32K (T-0617).
+3. Lock reward normalization constants from P1 baseline (T-0618).
 5. Policy calibrations P2-P6 (T-0619 through T-0625) -> C0-C7 matrix (T-0626)
-   with C6 now Gemma 4 31B @ 256K ctx (was Qwen 2.5 72B).
+   with C6 now Gemma 4 31B @ 256K ctx (was Qwen 2.5 72B). C7 (P6 Flash-MoE
+   slot-bank Mac) now has initial telemetry from T-0612 Session 24 (57.9%
+   hit rate at 16 slots, 7.17 tok/s decode) — the calibration sweep will
+   vary slot count, iosplit, and async flags.
 6. Stretch: upstream Gemma 4 support PR to ANEMLL (T-0609b); non-blocking for
    Phase 6 deliverables.
 7. Sampler improvement (T-0609a.5) — current argmax decode drifts after ~4 tokens;
@@ -148,9 +145,14 @@ Phase 6 (Hardware Bring-Up And Calibration), Gemma 4 family:
   shape, config.json's 2048 is informational); engine generates coherent Gemma 4
   output at 42.98 tok/s decode. Remaining quality issue (drift after ~4 decode
   tokens) tracked as T-0609a.5 (sampler improvement).
-- **Flash-MoE sidecar extraction for Gemma 4 26B-A4B.** anemll-flash-llama.cpp
-  was built around Qwen / Kimi topology. Gemma's 128-expert + 1-shared-expert
-  layout may need extractor patches. T-0612 scout before full calibration.
+- **Flash-MoE sidecar extraction for Gemma 4 26B-A4B.** RESOLVED in Session 23:
+  the vendored `flashmoe_sidecar.py` is schema-driven (reads `{arch}.expert_count`
+  from GGUF metadata) and already lists `ffn_gate_up_exps` in its routed-family
+  allowlist, so no extractor patches were needed. Gemma 4 26B-A4B has 128
+  routed experts per layer + a dense shared FFN path using standard `ffn_*`
+  tensor names (not `_shexp`) — so `--include-shared` is a no-op here. Extract
+  + byte-level verify both pass; slot-bank smoke ran end to end with 57.9% hit
+  rate + 97.8% prefetch hit rate at 16 slots / topk=8.
 - **ANEMLL Gemma 4 upstream PR (T-0609b, stretch).** Architectural deltas
   enumerated in tasks.md; non-blocking for Phase 6 now that T-0609a is done.
 

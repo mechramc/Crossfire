@@ -22,8 +22,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--binary",
         type=Path,
-        default=Path("vendor/anemll-flash-llama.cpp/build/bin/llama-cli"),
-        help="path to the anemll-flash-llama.cpp llama-cli binary",
+        default=Path("vendor/anemll-flash-llama.cpp/build/bin/llama-completion"),
+        help=(
+            "path to the anemll-flash-llama.cpp batch-completion binary "
+            "(llama-completion; llama-cli forces an interactive REPL that "
+            "cannot be disabled in this fork)"
+        ),
     )
     parser.add_argument(
         "--sidecar-out",

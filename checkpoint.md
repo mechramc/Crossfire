@@ -5,6 +5,124 @@ Rule: update this file before every `git push`.
 
 ---
 
+## Session 24 - 2026-04-23: T-0612 Mac Flash-MoE extractor validation (Gemma 4 26B-A4B)
+
+### What was done
+
+**T-0612 closed end-to-end on Mac.** The path from HF safetensors to a working
+Flash-MoE slot-bank smoke run was executed in one pass and all four stages
+recorded real telemetry.
+
+1. **HF -> fp16 GGUF conversion.** `.venv-convert/bin/python
+   vendor/llama.cpp/convert_hf_to_gguf.py models/gemma-4-26B-A4B-it --outfile
+   models/gemma-4-26B-A4B-fp16.gguf --outtype f16` produced 50.5 GB / 658
+   tensors in ~2 min. Converter recognized `Gemma4ForConditionalGeneration`,
+   emitted `gemma4.expert_count = 128` and `experts used count = 8`, 30
+   MoE layers with fused `ffn_gate_up_exps` (shape {2816, 1408, 128}) +
+   `ffn_down_exps` (shape {704, 2816, 128}) per layer.
+
+2. **Scout inspect.** `scripts/run_flashmoe_scout.py --model ... --include-shared`
+   ran cleanly against the vendored extractor. JSON confirmed `arch=gemma4`,
+   `expert_count=128`, `expert_used_count=8`, all 30 layers present with
+   both routed families, total routed scope = 45.68 GB. **Topology finding:**
+   Gemma 4 26B-A4B has 128 routed experts + a dense per-layer FFN using
+   standard `ffn_down/gate/up.weight` names (NOT `_shexp`). `--include-shared`
+   is a no-op for this model. The "128+1" in the project docs refers to the
+   dense shared FFN path, not a separate shared-expert tensor set.
+
+3. **Scout extract + byte verify.** Same entry point with `--extract` wrote
+   30 `layer_NNN.bin` files (1.42 GB each) + `manifest.json` (60 entries,
+   schema_version=1, flashmoe_gguf kind, layer_major_whole_tensor layout) to
+   `results/flashmoe_sidecar/gemma-4-26B-A4B/`. Byte-level verify against
+   source GGUF passed without exception. Total sidecar: 46.0 GB.
+
+4. **Stock smoke (Mac P0 MoE baseline).** `llama-completion` with `--moe-mode stock`
+   at fp16: **prompt 57.14 tok/s, decode 49.46 tok/s, load 1.88 s**, 48.4 GB
+   of Metal memory used (of 58.9 GB wired budget), 9.1 GB headroom.
+   Sampled output: "The user is asking for the capital of France." (chat
+   template + thinking mode engaged correctly).
+
+5. **Slot-bank smoke (Flash-MoE).** Same binary, `--moe-mode slot-bank
+   --moe-topk 8 --moe-slot-bank 16 --moe-prefetch-temporal`, sidecar pointed
+   at the extraction above. **Prompt 5.28 tok/s, decode 7.17 tok/s, load
+   4.32 s, 10.3 GB Metal (78% reduction vs stock), 48.6 GB headroom.**
+   Telemetry: slot-bank cached expert hit rate **57.9%**, prefetch (temporal
+   reuse) hit rate **97.8%**, 13,032 expert refs, 43,856 preads, **60.73 GiB
+   streamed from NVMe over 52 tokens**, **1.10 GiB routed bytes per token**.
+   Per-token time split: routing + slot resolve 0.02 ms, expert I/O source
+   372.54 ms (95.5%), expert upload 17.33 ms (4.4%). Per-layer hit rate
+   range 40.2% (layer 0) – 56.6% (layer 23).
+
+**Runtime wrapper corrections (`src/crossfire/flashmoe/runtime.py`).**
+
+The repo-side scout tooling from Session 21 had three defects that only
+surfaced during the first real end-to-end run. All three are now fixed:
+
+- **`--moe-mode=X` form rejected by the binary.** The fork's llama-cli /
+  llama-completion argparser does not accept `=`-separated flags. Changed
+  `f"--moe-mode={self.mode.value}"` / `f"--moe-topk={...}"` into
+  space-separated list entries (`"--moe-mode", self.mode.value, ...`).
+- **Inherited TTY -> interactive-mode hang.** `subprocess.run(capture_output=True)`
+  inherited the caller's stdin by default. When stdout is redirected, the
+  binary still detected stdin as a TTY and dropped into its REPL. `> ` was
+  printed in a tight loop until the log grew past 22 GB. Fix:
+  `subprocess.run(..., stdin=subprocess.DEVNULL)` in `_run_command`, applied
+  universally (harmless for inspect/extract/verify subprocess calls).
+- **Wrong binary + missing chat-template flag.** This fork's `llama-cli`
+  explicitly rejects `--no-conversation` ("please use llama-completion
+  instead") and enters conversation mode when the GGUF has a chat template.
+  Switched the scout default and runtime wrapper to `llama-completion`;
+  dropped `--simple-io` and `--color off` (llama-cli UI flags not accepted by
+  llama-completion); added `--jinja` (required to parse Gemma 4's chat
+  template) and `--single-turn` (explicit batch-completion flag).
+
+Test coverage updated: `tests/test_flashmoe.py` fake-subprocess mocks now
+accept `stdin` kwarg and the `test_run_inference_executes_binary_and_parses_output`
+test asserts `--jinja`, `--single-turn`, and `stdin is subprocess.DEVNULL`.
+
+**Scout script default.** `scripts/run_flashmoe_scout.py --binary` default
+changed from `.../llama-cli` to `.../llama-completion`.
+
+**Artifacts produced this session.**
+
+- `models/gemma-4-26B-A4B-fp16.gguf` (50.5 GB, sha256 prefix `d73341c5fb1e`).
+- `results/flashmoe_sidecar/gemma-4-26B-A4B/` (46.0 GB, 30 layer bins + manifest).
+- `results/t0612_mac_flashmoe_scout.json` (summary + telemetry, committed).
+- `results/raw/t0612_convert_26B_A4B_fp16.log`, `t0612_scout_inspect.log`,
+  `t0612_scout_extract.log`, `t0612_scout_verify.log`, `t0612_stock_smoke.log`,
+  `t0612_slotbank_smoke.log` (gitignored).
+
+### Verification
+
+- `./.venv/bin/pytest tests/test_flashmoe.py -q`: `25 passed`.
+- `./.venv/bin/pytest`: `170 passed`.
+- `./.venv/bin/ruff check .` and `ruff format --check .`: clean.
+- Byte-level sidecar verify: `FlashMoERuntime.verify_sidecar(..., metadata_only=False)`
+  returned without exception (wrapper raises on mismatch).
+- Scout JSON output sanity: `expert_count=128`, `expert_used_count=8`, 30
+  layers, 60 manifest entries, `45675970560` routed bytes claimed in scope.
+- Slot-bank smoke produced coherent Gemma 4 output through the chat template
+  and emitted the expected `log_runtime_summary: Flash-MoE ...` telemetry
+  block parsed by `_parse_inference_output`.
+
+### State at end of session
+
+- T-0612 closed; T-0612.repo closed (runtime wrapper now known-good against
+  a real binary, not just mocks).
+- Mac P0 MoE baseline captured: Gemma 4 26B-A4B fp16 stock = **49.46 tok/s
+  decode** on M4 Max.
+- Mac P6 initial telemetry captured: Gemma 4 26B-A4B slot-bank (16 slots,
+  topk=8) = **7.17 tok/s decode, 57.9% hit rate, 10.3 GB Metal**. The full
+  C7 ablation sweep (T-0625) can now vary slot count, `--moe-cache-io-split`,
+  and async/batch-read flags on top of this known-good baseline.
+- Outstanding critical path is now Phase 6 calibration; model-prep is done
+  on both nodes (PC T-0612.pc closed same day — see Session 23 (cont.)
+  entry below).
+- Disk used by this session's artifacts: ~97 GB (50 GB GGUF + 46 GB sidecar
+  + 1 GB logs/JSON).
+
+---
+
 ## Session 23 (cont.) - 2026-04-23: Close T-0612.pc — PC Gemma 4 26B-A4B TQ4_1S MoE smoke passed on RTX 5090
 
 ### What was done
