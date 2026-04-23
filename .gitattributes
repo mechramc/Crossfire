@@ -4,3 +4,9 @@
 # Shell scripts must use LF so WSL/Linux/macOS bash can execute them without
 # hitting "set: pipefail: invalid option name" from stray CR characters.
 *.sh text eol=lf
+
+# Datasets used for cross-node perplexity comparisons must be byte-identical
+# on every checkout. Without this, Windows git autoclrf silently rewrites LF
+# to CRLF, changing file size and SHA and invalidating the comparison.
+datasets/*.raw -text
+datasets/*.raw.gz -text

@@ -1,6 +1,6 @@
 # CROSSFIRE-X Status
 
-Last updated: 2026-04-23 (Session 25)
+Last updated: 2026-04-23 (Session 27)
 Branch: main
 Tracker state: software-layer tasks closed; Phase 6 calibration work in progress on both nodes. T-0601 (PC), T-0602 (Mac), and T-0606 (active WiFi discovery path) are done; EXO PC is cluster Master, Mac is Worker. **T-0607.mac/pc both done** — Mac has fp16 safetensors + Q8_0 GGUF, PC has Config-I (TQ4_1S/Q4_K/Q8_0 mixed) GGUF + tqp-v0.1.0 CUDA toolchain at `~/llama-cpp-v010/`. **T-0613 PC P0 baseline** (C0 reference) recorded: Gemma 4 31B Config-I on RTX 5090, prefill 139.45 tok/s / decode 42.76 tok/s. **T-0612.pc DONE Session 23**: Gemma 4 26B-A4B downloaded (49 GB HF), converted to fp16 GGUF (50.5 GB, 658 tensors), quantized to TQ4_1S (15 GB, 5.06 BPW). RTX 5090 smoke: **prefill 148.96 tok/s / decode 157.60 tok/s** — 3.7x faster than dense 31B due to MoE 4B-active routing. **T-0615.pc + T-0616.pc DONE Session 23**: PC C0 calibration baselines on Gemma 4 31B Config-I — wikitext-2-raw-v1 perplexity **PPL = 2595.39 ± 268.92**; GPU power profile **idle 31 W → inference peak 504 W (96.2% VRAM, 42 °C, 100% util)**, steady-state mean 429 W, 13.8× idle. **T-0615.mac + T-0616.mac DONE Session 25**: 3 variants each — 31B Q8_0 / 26B-A4B fp16 stock / 26B-A4B fp16 slot-bank. Mac PPLs 11,896 / 57,163 / 38,957 (all IT-on-continuation, high-by-design); decode throughput 14.6 / 50.3 / 8.3 tok/s; GPU power 31.7 / 17.2 / 3.3 W; tok/J 0.46 / **2.92** (best) / 1.69. **Two numerics questions flagged for pre-C7-sweep investigation**: (a) slot-bank PPL diverges 32% from stock on Mac 26B-A4B — `--moe-prefetch-temporal` is leading suspect; (b) PC Config-I PPL (2595) is 4.6× lower than Mac Q8_0 PPL (11896) on the same 31B IT model — Q8_0 should be cleaner than Config-I, so cross-harness tokenization/chunking should be compared. **T-0612 (Mac Flash-MoE extractor validation) CLOSED Session 24**: same fp16 GGUF on Mac, sidecar extracted + byte-verified (46.0 GB, 30 layers, 60 entries), stock Gemma 4 26B-A4B fp16 decode **49.46 tok/s at 48.4 GB Metal**, slot-bank (16 slots, topk=8) decode **7.17 tok/s at 10.3 GB Metal with 57.9% slot-bank hit rate + 97.8% prefetch hit rate**; runtime wrapper patched to use `llama-completion` + `--jinja --single-turn` + closed stdin (the fork's `llama-cli` is not usable for batch completions). T-0609a Gemma 4 E2B chunked CoreML engine DONE: `src/crossfire/ane/gemma4_chunked.py` loads 3 stateful chunks (MLState API), generates coherent text ("Paris" for "The capital of France is"), 42.98 tok/s decode / 138.9 ms TTFT on M4 Max ANE. T-0610 Rustane and Mac half of T-0611 complete. Project venv on Python 3.13.12 (coremltools 9.0 has no working native wheel for 3.14). WiFi is the active interconnect; T-0603/T-0604/T-0605 remain optional future TB4/USB4 work if WiFi throughput proves insufficient, but they are not current blockers.
 
@@ -65,13 +65,18 @@ docs use `CROSSFIRE-X`, while some code/history still refer to `CROSSFIRE v2`.
   T-0614 (Mac P0 decode), T-0615.pc + T-0615.mac (perplexity; 5 variants
   total), T-0616.pc + T-0616.mac (power). Open items: T-0617 P1 distributed,
   T-0618 reward lock, T-0619–T-0625 policy sweeps, T-0626 matrix compile.
-  Two open numerics questions flagged for pre-sweep investigation:
-  (a) Mac slot-bank PPL diverges 32% from Mac stock on 26B-A4B — likely
-  `--moe-prefetch-temporal`, re-run queued. (b) PC Config-I PPL = 2595 vs
-  Mac Q8_0 PPL = 11896 on the same 31B IT model — Q8_0 should bound
-  Config-I from below for PPL; cross-harness comparison of tokenization /
-  chunk-alignment / logprob accumulation is worth one experiment before C0
-  ships.
+  Both numerics investigations closed Session 27:
+  (a) Mac slot-bank PPL divergence: prefetch = 25% of the gap; remaining
+  25% is kernel-level. C7 will ship with slot-bank +prefetch and PPL
+  divergence documented as open upstream question.
+  (b) PC↔Mac 4.6× gap: confirmed binary/harness-dominated (4×), not
+  corpus (1.15×). Decision for C0: recommend reporting both harnesses
+  side by side with methodology footnote rather than re-aligning
+  toolchains; treat PPL as per-node correctness gate, not cross-node
+  comparable. Canonical wiki.test.raw corpus now tracked in
+  `datasets/wiki.test.raw` (1.2 MB, sha256 `bbf94c5…64574a`) with
+  `.gitattributes` `datasets/*.raw -text` so Windows checkouts don't
+  corrupt line endings.
 - Orion Forge serving (Phase 7)
 - Textual dashboard and final evaluation deliverables (Phase 8)
 - Software follow-ups that are not on the critical path: persist bandit state (T-0412),

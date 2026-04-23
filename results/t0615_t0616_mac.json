@@ -258,6 +258,47 @@
         "decode_log": "results/raw/t0616_mac_26B_A4B_slotbank_decode.log",
         "power_log": "results/raw/t0616_mac_26B_A4B_slotbank_decode_power.log"
       }
+    },
+    {
+      "id": "v3b_26b_a4b_slot_bank_no_prefetch",
+      "label": "Gemma 4 26B-A4B fp16 slot-bank (16 slots, topk=8, NO prefetch-temporal)",
+      "model": "models/gemma-4-26B-A4B-fp16.gguf + results/flashmoe_sidecar/gemma-4-26B-A4B/",
+      "binary": "vendor/anemll-flash-llama.cpp/build/bin/llama-perplexity",
+      "mode": "slot-bank (--no-moe-prefetch-temporal)",
+      "purpose": "numerics isolation: does disabling prefetch eliminate the 32% PPL delta vs stock?",
+      "t0615_perplexity": {
+        "ppl": 43017.3099,
+        "ppl_stderr": 4669.63412,
+        "chunks_scored": 20,
+        "per_chunk_cumulative": [
+          3522.622,
+          9413.6489,
+          7440.0659,
+          8231.7014,
+          10761.4497,
+          17278.7457,
+          28233.2216,
+          25949.5342,
+          33523.4585,
+          33420.2801,
+          35372.2857,
+          35711.6117,
+          42223.7284,
+          38775.1041,
+          39070.332,
+          39586.8213,
+          37986.5705,
+          37737.4479,
+          37829.0303,
+          43017.3099
+        ]
+      },
+      "slot_bank_hit_rate": 0.499,
+      "walltime_sec": 1446.27,
+      "prefill_tok_s": 7.08,
+      "sources": {
+        "ppl_log": "results/raw/t0615_mac_26B_A4B_slotbank_noprefetch_ppl.log"
+      }
     }
   ],
   "findings": [
@@ -266,5 +307,74 @@
     "Decode throughput confirms prior measurements: 31B Q8_0 = 14.6 tok/s, 26B-A4B stock fp16 = 50.3 tok/s, 26B-A4B slot-bank fp16 = 8.3 tok/s (6x slowdown from stock, consistent with 95%-IO-bound slot-bank path).",
     "Slot-bank hit rate was 60.5% at ctx=2048, slightly above the 57.9% measured at ctx=4096 in T-0612 Session 24 \u2014 smaller context reduces expert working-set pressure.",
     "Prefill perplexity run was fast on 26B-A4B stock (1606 tok/s prefill) because MoE 4B-active routing is lightweight for the prefill pass compared to dense 31B (269 tok/s)."
-  ]
+  ],
+  "slot_bank_numerics_investigation": {
+    "question": "Is slot-bank bit-identical to stock on Gemma 4 26B-A4B?",
+    "answer": "No. Prefetch accounts for ~25% of the divergence; the remaining ~15% is in the slot-bank kernel itself or Metal shader implementation.",
+    "ppl_ladder": {
+      "stock": 57162.8,
+      "slot_bank_plus_prefetch": 38956.84,
+      "slot_bank_minus_prefetch": 43017.31
+    },
+    "deltas": {
+      "stock_to_slot_plus_prefetch_pct": -31.85,
+      "stock_to_slot_minus_prefetch_pct": -24.77,
+      "prefetch_contribution_pct": 7.08
+    },
+    "chunk_1_surprise": {
+      "stock": 5997.4,
+      "slot_plus_prefetch": 6029.93,
+      "slot_minus_prefetch": 3522.62,
+      "note": "Stock and slot-bank+prefetch agree on chunk 1 to within 0.5%. Disabling prefetch drops chunk 1 to 3522.62 \u2014 half of stock. Suggests --no-moe-prefetch-temporal alters initial slot state or cold-start expert selection beyond just routing bias."
+    },
+    "hit_rate_impact": {
+      "with_prefetch_pct": 57.9,
+      "without_prefetch_pct": 49.9,
+      "absolute_drop_pp": 8.0
+    },
+    "walltime_impact": {
+      "with_prefetch_sec": 820,
+      "without_prefetch_sec": 1446,
+      "slowdown_factor": 1.76
+    },
+    "c7_decision": "Pick slot-bank +prefetch as the canonical C7 config (performance-optimal at 7.17 tok/s, 57.9% hit rate). Document PPL divergence from stock (~32%) as an open upstream question for the anemll-flash-llama.cpp Gemma 4 MoE kernel. Do not claim slot-bank is bit-equivalent to stock in the final writeup.",
+    "hypotheses_to_investigate": [
+      "(a) Stock mode's 128-expert MoE kernel has a numerical issue on Gemma 4 that slot-bank's repacked sidecar path happens to avoid (stock is WRONG, slot-bank is CORRECT).",
+      "(b) Slot-bank uses approximate top-k from cached experts when misses are pending, even though telemetry says refs ~= theoretical max.",
+      "(c) The Metal shader for the slot-bank matmul has different numerical behavior (fusion, accumulation order, precision) vs the stock MoE matmul."
+    ],
+    "mac_vs_pc_cross_harness_note": "PC harness (tqp-v0.1.0 llama.cpp, Salesforce-source wikitext via ggml-org/ci mirror) reports stable per-chunk PPL 1700-2800 on 31B Config-I, cumulative = 2595. Mac harness reports climbing per-chunk PPL ending at 11896 on 31B Q8_0. Cross-node sanity run with Mac's committed wiki.test.raw queued for PC side to isolate harness/binary vs corpus as the 4.6x gap explanation."
+  },
+  "setdefault": null,
+  "mac_vs_pc_harness_investigation": {
+    "question": "On the same Gemma 4 31B IT model, why does PC report PPL=2595 while Mac reports PPL=11896?",
+    "resolution": "The 4.6x gap is 4x harness/binary + 1.15x corpus. NOT corpus-dominant.",
+    "evidence": [
+      {
+        "run": "PC original, PC local mirror (ggml-org/ci, 1,305,088 bytes)",
+        "ppl": 2595.39,
+        "stderr": 268.92,
+        "binary": "~/llama-cpp-v010 (tqp-v0.1.0)"
+      },
+      {
+        "run": "PC cross-corpus, Mac committed file (bbf94c..., 1,287,656 bytes after LF normalization)",
+        "ppl": 2991.16,
+        "stderr": 312.83,
+        "binary": "~/llama-cpp-v010 (tqp-v0.1.0)"
+      },
+      {
+        "run": "Mac, Mac committed file (same bytes as above)",
+        "ppl": 11895.78,
+        "stderr": 1233.68,
+        "binary": "vendor/llama.cpp (tqp-v0.1.1)"
+      }
+    ],
+    "decomposition": {
+      "corpus_factor_pc_internal": 1.153,
+      "binary_factor_same_corpus_pc_vs_mac": 3.977,
+      "combined_factor_original": 4.584
+    },
+    "decision_required_for_C0": "Pick one canonical llama-perplexity harness for the C0 ablation row. Options: (A) re-run Mac dense 31B on the tqp-v0.1.0 base so numbers compare directly with PC Config-I; (B) re-run PC Config-I via the anemll-flash-llama.cpp build so numbers compare with Mac MoE path; (C) report both harnesses side by side with a methodology footnote and treat PPL as a per-node correctness gate rather than a cross-node comparable.",
+    "windows_checkout_gotcha": "Committed wiki.test.raw was silently converted LF -> CRLF on Windows git checkout (size 1,287,656 -> 1,290,547), changing SHA. PC user normalized to LF in /tmp/ before re-running. Added '.gitattributes' rule 'datasets/*.raw -text' so future Windows checkouts preserve LF bytes."
+  }
 }

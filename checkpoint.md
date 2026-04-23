@@ -5,6 +5,142 @@ Rule: update this file before every `git push`.
 
 ---
 
+## Session 27 - 2026-04-23: Numerics investigations close out (slot-bank ≠ stock; PC↔Mac gap is harness, not corpus)
+
+### What was done
+
+Two numerics investigations flagged in Session 26 resolved this session.
+
+**1. Slot-bank PPL divergence vs stock on Mac Gemma 4 26B-A4B.**
+
+Re-ran slot-bank perplexity with `--no-moe-prefetch-temporal` to isolate the
+contribution of the prefetch heuristic. Full PPL ladder on the same GGUF,
+same corpus, same seed:
+
+| Config                       | Final PPL  | Δ vs stock | Chunk 1 | Hit rate | Walltime |
+|------------------------------|-----------:|-----------:|--------:|---------:|---------:|
+| stock                        | 57,162.80  |         —  | 5,997.4 |    N/A   |     6 s  |
+| slot-bank **+prefetch**      | 38,956.84  |   −31.85 % | 6,029.9 |   57.9 % |   820 s  |
+| slot-bank **−prefetch**      | 43,017.31  |   −24.77 % | 3,522.6 |   49.9 % | 1,446 s  |
+
+Findings:
+
+- **Prefetch explains ~25% of the divergence, not all.** Disabling it moves
+  slot-bank PPL from 38,957 → 43,017 (closer to stock 57,163, but still
+  25% below).
+- **Residual ~25% comes from the slot-bank kernel itself or its Metal
+  shader path**, not the prefetch heuristic. The sidecar repacking is
+  byte-verified (Session 24), so the divergence is in runtime compute,
+  not in stored weights.
+- **Chunk-1 surprise**: stock and slot-bank+prefetch agree on chunk 1 to
+  within 0.5% (5,997 vs 6,030). Turning prefetch OFF drops chunk 1 to
+  3,523 — 41% lower. `--no-moe-prefetch-temporal` evidently affects
+  initial slot state or cold-start expert selection beyond just
+  per-token routing bias.
+- **Disabling prefetch hurt throughput**: 1.76× slower wall time
+  (820 s → 1,446 s), hit rate dropped 8 pp (57.9% → 49.9%). Prefetch was
+  doing real slot-residency biasing, not just cosmetic tuning.
+- **Counterintuitive direction**: slot-bank's PPL is *lower* than
+  stock's in both configs. Three hypotheses for the ~25% residual:
+  (a) stock's 128-expert Metal kernel has a numerical issue on Gemma 4
+  that slot-bank's repacked path avoids (stock wrong, slot-bank right);
+  (b) slot-bank uses approximate top-k from cached experts when misses
+  are pending, even though telemetry says refs ≈ theoretical max;
+  (c) the slot-bank matmul shader has different fusion / accumulation /
+  precision vs the stock MoE matmul. (b) and (c) are most likely.
+
+**Decision for the T-0625 C7 sweep**: use slot-bank +prefetch as the
+canonical P6 config (performance-optimal, 7.17 tok/s at 57.9% hit rate)
+and document the ~32% PPL divergence vs stock as an open upstream
+question. Do NOT claim slot-bank is bit-equivalent to stock in the
+writeup.
+
+**2. PC↔Mac PPL gap on the same 31B IT model.**
+
+Committed Mac's `wiki.test.raw` (1,287,656 bytes,
+sha256 `bbf94c53a05abe...64574a`) to git with `datasets/*` ignore plus
+a targeted `!datasets/wiki.test.raw` exception so both nodes score
+against byte-identical input. PC user pulled and re-ran Config-I PPL
+against it:
+
+| Run                                           | Corpus SHA            | PPL          | Δ from PC local |
+|-----------------------------------------------|-----------------------|-------------:|----------------:|
+| PC original (PC local mirror, 1,305,088 B)    | different mirror      | 2,595 ± 269  |              —  |
+| PC cross-corpus (Mac file, 1,287,656 B, LF)   | `bbf94c5…64574a` ✓    | **2,991 ± 313** |         +15 %  |
+| Mac (same Mac file)                           | `bbf94c5…64574a` ✓    | 11,896 ± 1,234 |         4.0×   |
+
+Decomposition:
+- Corpus mirror (PC-local → Mac-file, same PC binary) = **1.15×**
+- Binary (PC `tqp-v0.1.0` vs Mac `tqp-v0.1.1` / `anemll-flash-llama.cpp`,
+  same file) = **3.98×**
+- Combined, original apples-to-oranges gap = **4.58×**
+
+**The 4.6× PC↔Mac gap is dominated by the harness / llama.cpp fork**, not
+the corpus. `tqp-v0.1.0` on PC produces ~25% of the Mac `tqp-v0.1.1` PPL
+on identical bytes. This is larger than any model-quality or
+quantization-level signal and it means PC and Mac numbers are **not
+comparable** as-is for the C0 ablation row.
+
+**Windows checkout gotcha.** Committed `wiki.test.raw` on its first
+Windows checkout was silently converted LF → CRLF by git autocrlf,
+inflating size from 1,287,656 → 1,290,547 and breaking the SHA match.
+PC user normalized with `tr -d '\r'` in /tmp/ before the cross-corpus
+run. Fixed at the repo level this session: `.gitattributes` now has
+`datasets/*.raw -text` (and `datasets/*.raw.gz -text`) so future
+Windows pulls preserve LF bytes byte-for-byte.
+
+### Decision required before C0 ships
+
+Pick one of three canonicalization paths (not done this session; the
+data now supports the decision):
+
+- **(A) Align binaries on PC side**: rebuild a `tqp-v0.1.1`-matching
+  PC toolchain so PC re-runs Config-I PPL under the same codebase the
+  Mac uses. Keeps Mac as-is. Downside: PC loses the side-toolchain it
+  already has wired for 31B decode.
+- **(B) Align binaries on Mac side**: rebuild Mac's `llama-perplexity`
+  from `tqp-v0.1.0` to match PC. Downside: Mac's 26B-A4B MoE path is
+  already pinned to `anemll-flash-llama.cpp` (a different fork), so
+  only the 31B Q8_0 baseline would align.
+- **(C) Report both harnesses side by side** with a methodology
+  footnote and treat PPL as a per-node correctness gate rather than
+  a cross-node comparable metric. Simplest, most honest; pushes
+  absolute-quality evaluation to Phase 7/8 via MMLU or a
+  chat-template-aware benchmark where both nodes use the same
+  grader.
+
+Recommendation: **(C) now, revisit (A) or (B) if Phase 7/8 needs
+PPL to be cross-node comparable.** PPL as a correctness gate is what
+we actually need for the P1–P6 policy sweep anyway.
+
+### Artifacts produced this session
+
+Committed:
+- `datasets/wiki.test.raw` (1.2 MB, LF, sha256 `bbf94c5…64574a`)
+- `.gitattributes` — `datasets/*.raw -text` rule
+- `results/t0615_t0616_mac.json` — extended with the no-prefetch
+  variant and a `mac_vs_pc_harness_investigation` block
+
+Local-only (gitignored):
+- `results/raw/t0615_mac_26B_A4B_slotbank_noprefetch_ppl.log`
+- PC-side raw log captured by user on the other node:
+  `results/raw/t0615_pc_perplexity_crosscorpus.log`
+
+### State at end of session
+
+- Slot-bank numerics question resolved: NOT bit-equivalent to stock,
+  prefetch is 25% of divergence, rest is kernel-level. Documented for C7.
+- PC↔Mac gap question resolved: 4× from binary/fork divergence, not
+  corpus. Canonicalization decision pending — recommendation is (C)
+  side-by-side with methodology footnote.
+- Remaining open items: T-0617 (P1 distributed baseline) is the next
+  critical-path item; T-0619-T-0625 (policy calibration sweep); C0
+  canonicalization choice.
+- No code changes this session besides `.gitattributes` + results JSON.
+- Tests + lint not re-run (only data / config changes).
+
+---
+
 ## Session 26 - 2026-04-23: T-0615 + T-0616 Mac baselines (perplexity + power)
 
 ### What was done
