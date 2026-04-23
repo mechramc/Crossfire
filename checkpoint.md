@@ -5,6 +5,39 @@ Rule: update this file before every `git push`.
 
 ---
 
+## Session 22 - 2026-04-22: End-of-day tracker sync after 26B-A4B download
+
+### What was done
+
+- Verified that the local Hugging Face download of Gemma 4 26B-A4B completed
+  successfully into `models/gemma-4-26B-A4B-it/`.
+- Confirmed both shard files are now present:
+  `model-00001-of-00002.safetensors` and
+  `model-00002-of-00002.safetensors`, plus
+  `model.safetensors.index.json`, tokenizer, config, processor config, and
+  generation config.
+- Updated `tasks.md` so T-0612 now reflects the real state: model acquisition
+  is complete on the Mac, while Flash-MoE sidecar inspection/extraction is
+  still pending.
+- Updated `status.md` to record that the 26B-A4B HF weights are local and that
+  the remaining blocker is extractor validation, not download/auth.
+
+### Verification
+
+- `./.venv/bin/pytest`: `165 passed, 5 skipped`
+- `./.venv/bin/ruff check .`: clean
+- `./.venv/bin/ruff format --check .`: clean
+
+### State at end of session
+
+- End-of-day model state on the Mac:
+  Gemma 4 31B HF, Gemma 4 31B Q8_0 GGUF, Gemma 4 E2B HF, Gemma 4 E2B CoreML,
+  and Gemma 4 26B-A4B HF are all present locally.
+- T-0612 is now an extractor-validation task rather than a model-download task.
+- T-0617 remains unrun; no distributed WiFi baseline was recorded today.
+
+---
+
 ## Session 21 - 2026-04-22: Wire Flash-MoE scout/extract path for T-0612
 
 ### What was done

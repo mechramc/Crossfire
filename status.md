@@ -43,6 +43,9 @@ docs use `CROSSFIRE-X`, while some code/history still refer to `CROSSFIRE v2`.
   `FlashMoEStats` for smoke runs
 - `scripts/run_flashmoe_scout.py` -- repo entrypoint for T-0612 scout work
   against Gemma 4 26B-A4B once the GGUF is present locally
+- `models/gemma-4-26B-A4B-it/` -- local HF download now complete; both
+  safetensor shards and tokenizer/config assets are present for Mac-side
+  Flash-MoE extractor scouting
 
 ### Tests
 - `tests/test_ane.py`, `tests/test_pipeline.py`, `tests/test_metrics.py`
@@ -53,9 +56,10 @@ docs use `CROSSFIRE-X`, while some code/history still refer to `CROSSFIRE v2`.
 
 ## Not Started
 
-- PC-side dense model prep and MoE extraction work (remaining pieces of T-0607 and T-0612)
-  Repo-side T-0612 scout tooling is now implemented; the remaining blocker is
-  the actual Gemma 4 26B-A4B GGUF/model acquisition and extraction run.
+- PC-side dense model prep and Mac-side MoE extraction work (remaining pieces
+  of T-0607 and T-0612). Repo-side T-0612 scout tooling is implemented and the
+  Gemma 4 26B-A4B HF weights are now downloaded locally; the remaining blocker
+  is the actual extractor validation run.
 - Calibration runs for every policy (T-0613 through T-0626)
 - Orion Forge serving (Phase 7)
 - Textual dashboard and final evaluation deliverables (Phase 8)
