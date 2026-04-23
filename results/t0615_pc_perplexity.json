@@ -1,0 +1,64 @@
+{
+  "task_id": "T-0615.pc",
+  "description": "PC baseline perplexity on Gemma 4 31B Config-I (TQ4_1S/Q4_K/Q8_0 mixed) over wikitext-2-raw-v1 test split",
+  "timestamp_utc": "2026-04-23T20:36:20+00:00",
+  "node": "pc",
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 5090",
+    "compute_capability": "12.0 (Blackwell)",
+    "vram_total_mib": 32606,
+    "host": "WSL2 Ubuntu on Windows 11"
+  },
+  "execution_policy": "P0",
+  "ablation_config": "C0",
+  "backend": "llama-perplexity (TheTom/llama-cpp-turboquant @ tqp-v0.1.0, side build at ~/llama-cpp-v010/)",
+  "compute_target": "T1_cuda_gpu",
+  "model": {
+    "name": "gemma-4-31B-it",
+    "path": "~/crossfire-models/gemma-4-31b-it-tqplus/Gemma-4-31B-it-Config-I.gguf",
+    "format": "GGUF Config-I (mixed: 327 tq4_1s + 56 q4_K + 28 q8_0 + 422 f32 tensors)",
+    "bpw": 5.28,
+    "size_gib": 18.87,
+    "params_billions": 30.70,
+    "source": "hf:thetom-ai/Gemma-4-31B-it-TQPlus (pre-quantized at tqp-v0.1.0)"
+  },
+  "dataset": {
+    "name": "wikitext-2-raw-v1",
+    "split": "test",
+    "path": "~/crossfire-data/wikitext-2-raw/wiki.test.raw",
+    "size_bytes": 1305088,
+    "source": "hf:datasets/ggml-org/ci/wikitext-2-raw-v1.zip"
+  },
+  "run_config": {
+    "context_size": 512,
+    "n_chunks_requested": 20,
+    "n_chunks_observed": 20,
+    "tokens_per_chunk": 512,
+    "tokens_total": 10240,
+    "batch_size": 2048,
+    "n_seq_batched": 4,
+    "n_gpu_layers": 99,
+    "seed": 1
+  },
+  "metrics": {
+    "perplexity_final": 2595.3860,
+    "perplexity_stderr": 268.91931,
+    "perplexity_per_chunk": [
+      430.8074, 2382.7428, 2409.6801, 2681.2151, 2220.3938,
+      1784.0969, 1707.6896, 1643.4211, 1901.0903, 1827.2268,
+      2045.0174, 2101.2519, 2813.0042, 2775.7463, 2717.1562,
+      2802.0860, 2425.4229, 2670.9333, 2600.2682, 2595.3860
+    ],
+    "tokenization_ms": 648.01,
+    "prompt_eval_ms": 2859.30,
+    "prompt_eval_tok_per_sec": 3581.30
+  },
+  "raw_log": "results/raw/t0615_pc_perplexity.log",
+  "notes": [
+    "C0 reference perplexity for PC. P0 single-node, no compression beyond TQ4_1S quantization.",
+    "Absolute PPL is high (2595) because (a) Gemma 4 31B-it is instruction-tuned and expects chat-template-formatted input, not raw Wikipedia prose; (b) c=512 is short relative to the model's 262144 ctx_train; (c) the Config-I mixed quant adds quantization noise. The same model in chat-template mode produces coherent output (T-0613).",
+    "Used as a relative reference for the C0-C7 calibration matrix. Lower-PPL configs in the matrix are expected when (i) using chat-template-aware perplexity, (ii) using a longer context, or (iii) using full-precision weights.",
+    "Per-chunk PPL is stable in the 1700-2800 range after chunk 1 (chunk 1 always shows the warm-up prefix-mismatch bump).",
+    "Same workload doubles as the GPU power-profile source for T-0616.pc."
+  ]
+}

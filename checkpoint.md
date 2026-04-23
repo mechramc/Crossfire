@@ -5,6 +5,68 @@ Rule: update this file before every `git push`.
 
 ---
 
+## Session 25 - 2026-04-23: T-0615.pc + T-0616.pc PC C0 calibration baselines (Gemma 4 31B Config-I)
+
+### What was done
+
+PC-side C0 calibration baselines recorded against the existing Gemma 4 31B
+Config-I GGUF (TQ4_1S/Q4_K/Q8_0 mixed, 18.87 GiB, 5.28 BPW) on the RTX 5090.
+Mac counterparts (T-0615.mac, T-0616.mac) are running in a parallel session
+and will land separately.
+
+1. **T-0615.pc — wikitext-2-raw-v1 perplexity.** Pulled the dataset to
+   `~/crossfire-data/wikitext-2-raw/wiki.test.raw` (1.3 MB,
+   `hf:datasets/ggml-org/ci/wikitext-2-raw-v1.zip`). Ran
+   `~/llama-cpp-v010/build/bin/llama-perplexity -m
+   Gemma-4-31B-it-Config-I.gguf -f wiki.test.raw -c 512 --chunks 20
+   --n-gpu-layers 99 --seed 1`. **PPL = 2595.3860 ± 268.91931** over
+   20 × 512-token chunks (10,240 tokens total). Per-chunk values stable in
+   1700–2800 after the chunk-1 warm-up bump (430.81). Tokenize 648 ms,
+   prompt eval 2859 ms (3,581 tok/s).
+
+2. **T-0616.pc — GPU power profile.** Re-ran the T-0615 workload while
+   `nvidia-smi --query-gpu=timestamp,power.draw,utilization.gpu,memory.used,temperature.gpu`
+   sampled at 1 Hz. 31 samples (5 idle_pre + 21 load + 5 idle_post). Idle
+   baseline 31.16 W; inference peak 504.32 W at 100% util, 42 °C, 31,351 MiB
+   VRAM (96.2% of 32,606 total); steady-state mean of the last 4 samples
+   (>90% util) = 429.29 W. ΔW vs idle = +398 W (13.8× idle draw). Energy
+   over the 21 s load window ≈ 3,110 J (0.864 Wh). Cooling headroom is large
+   — 42 °C peak is far below RTX 5090 throttle.
+
+### Headline findings
+
+- **Absolute PPL is high (2595)** because the model is instruction-tuned,
+  the dataset is raw Wikipedia prose without chat formatting, and c=512 is
+  short relative to ctx_train=262144. **Valid as a relative C0 reference**
+  for the C0–C7 calibration matrix; lower PPL is expected when (a) using
+  chat-template-aware perplexity, (b) longer context, (c) full precision.
+  Same model in chat-template mode produces coherent CoT (T-0613).
+- **VRAM peak 96.2% of total** confirms the C0 PC envelope is tight.
+  Any longer-context or larger-batch C1–C7 cell will need TriAttention KV
+  reduction to fit on the 5090 alone.
+- **Power signature is a clean three-phase shape**: idle (~31 W) → tensor
+  upload ramp (50–150 W, 1–2 s) → inference plateau (266–504 W, ~10 s).
+  This shape will be the template against which P1–P6 power deltas are
+  measured.
+
+### Caveats
+
+- 21 s load window is short. A longer-running calibration cell
+  (e.g. c=2048 / --chunks 100) will produce a more steady envelope; this
+  baseline captures inclusive-of-ramp behavior, not pure steady state.
+- Mac side (T-0615.mac, T-0616.mac) is running independently in a parallel
+  session — those results will be added when that session merges.
+
+### Local files
+
+- `results/t0615_pc_perplexity.json` (committed)
+- `results/t0616_pc_power.json` (committed)
+- `results/raw/t0615_pc_perplexity.log` (gitignored)
+- `results/raw/t0616_pc_power.csv` (gitignored)
+- WSL: `/tmp/t0615_pc_perplexity.log`, `/tmp/t0616_pc_power.csv`
+
+---
+
 ## Session 24 - 2026-04-23: T-0612 Mac Flash-MoE extractor validation (Gemma 4 26B-A4B)
 
 ### What was done

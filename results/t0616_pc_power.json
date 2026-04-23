@@ -1,0 +1,94 @@
+{
+  "task_id": "T-0616.pc",
+  "description": "PC GPU power profile during sustained inference workload (T-0615 perplexity rerun) on RTX 5090",
+  "timestamp_utc": "2026-04-23T20:35:55+00:00",
+  "node": "pc",
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 5090",
+    "compute_capability": "12.0 (Blackwell)",
+    "vram_total_mib": 32606,
+    "tdp_w_nominal": 575,
+    "host": "WSL2 Ubuntu on Windows 11"
+  },
+  "execution_policy": "P0",
+  "ablation_config": "C0",
+  "compute_target": "T1_cuda_gpu",
+  "sampler": {
+    "tool": "nvidia-smi",
+    "query": "timestamp,power.draw,utilization.gpu,memory.used,temperature.gpu",
+    "interval_sec": 1.0,
+    "phases": ["idle_pre", "load", "idle_post"],
+    "n_samples_total": 31,
+    "n_samples_idle_pre": 5,
+    "n_samples_load": 21,
+    "n_samples_idle_post": 5
+  },
+  "workload": {
+    "binary": "~/llama-cpp-v010/build/bin/llama-perplexity",
+    "model": "~/crossfire-models/gemma-4-31b-it-tqplus/Gemma-4-31B-it-Config-I.gguf",
+    "args": "-c 512 --chunks 20 --n-gpu-layers 99 --seed 1",
+    "dataset": "~/crossfire-data/wikitext-2-raw/wiki.test.raw",
+    "duration_sec_observed": 21,
+    "note": "Same workload as T-0615.pc; the perplexity sweep provides a sustained, repeatable GPU load for power profiling."
+  },
+  "metrics": {
+    "power_w": {
+      "idle_pre_mean": 31.16,
+      "idle_pre_min": 30.59,
+      "idle_pre_max": 31.65,
+      "load_mean": 148.12,
+      "load_peak": 504.32,
+      "load_inference_steady_mean": 429.29,
+      "load_inference_steady_note": "Mean of last 4 samples once GPU util hit >90%; reflects sustained Blackwell prefill draw under TQ4_1S inference.",
+      "idle_post_mean": 109.08,
+      "idle_post_steady_mean": 52.20,
+      "idle_post_steady_note": "Mean of trailing 3 samples after the post-unload thermal/clock ramp-down."
+    },
+    "gpu_util_pct": {
+      "idle_pre_mean": 0.8,
+      "load_peak": 100,
+      "load_steady_mean_pct": 87.0,
+      "load_steady_note": "Mean util once tensors finished uploading (samples 22-25)."
+    },
+    "vram_mib": {
+      "idle_pre": 1030,
+      "load_peak": 31351,
+      "load_steady_mean": 31321,
+      "headroom_at_peak_mib": 1255,
+      "fraction_of_total_at_peak": 0.962
+    },
+    "temperature_c": {
+      "idle_pre_mean": 28.0,
+      "load_peak": 42,
+      "idle_post_steady_mean": 29.0,
+      "thermal_envelope_note": "Peak temp 42 C is well below RTX 5090 throttle threshold; cooling headroom is substantial under this short (~10 s) workload."
+    },
+    "energy_estimate": {
+      "load_window_sec": 21,
+      "load_total_energy_j": 3110.57,
+      "load_total_energy_wh": 0.864,
+      "method": "Riemann sum over 1 Hz samples; load includes ramp-up + steady-state inference."
+    }
+  },
+  "samples_csv": "results/raw/t0616_pc_power.csv",
+  "raw_log": "results/raw/t0616_pc_power.csv",
+  "comparisons": {
+    "vs_idle_baseline": {
+      "delta_w_steady": 398.13,
+      "ratio_steady": 13.78,
+      "note": "Sustained inference draws ~13.8x the idle power on the 5090."
+    },
+    "vs_tdp_nominal": {
+      "fraction_at_peak": 0.877,
+      "note": "Peak draw (504 W) reaches 87.7% of the 575 W TDP; full TDP would require longer sustained throughput."
+    }
+  },
+  "notes": [
+    "C0 reference power profile for PC. P0 single-node, no compression beyond TQ4_1S quantization.",
+    "Workload duration was short (~10 s of true inference) because perplexity over 20 chunks at c=512 is a small sweep; future T-0616 reruns at c=2048 or --chunks 100 will produce a longer steady-state envelope.",
+    "Power trace shows a clear three-phase shape: idle pre (~31 W), tensor upload ramp (50-150 W), inference plateau (266-504 W with mean ~429 W in the last 4 samples).",
+    "Sample at 15:36:20 (325.57 W, 1021 MiB VRAM) captures the model unload boundary; not representative of either inference or true idle.",
+    "VRAM peak of 31,351 MiB (96.2% of 32,606) confirms the C0 PC budget is tight; any longer-context or larger-batch C1-C7 cell will need TriAttention KV reduction to fit.",
+    "Companion result: results/t0615_pc_perplexity.json (workload that sourced this trace)."
+  ]
+}
