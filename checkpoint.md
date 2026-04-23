@@ -5,6 +5,49 @@ Rule: update this file before every `git push`.
 
 ---
 
+## Session 19 - 2026-04-22: Tracker sync for WiFi interconnect decision
+
+### What was done
+
+- Updated `tasks.md` to reclassify T-0603/T-0604/T-0605 from implied bring-up
+  blockers to optional future TB4/USB4 optimization tasks. Current repo reality
+  is that the cluster runs over WiFi and higher-bandwidth cable work is only
+  needed if WiFi throughput is not enough.
+- Updated T-0606 wording to reflect the actual validated path: WiFi mDNS
+  discovery between PC and Mac is the active production interconnect path.
+- Updated `status.md` to remove stale next-work items that were already complete
+  in Session 18 (`T-0610`, Mac side of `T-0611`, and `T-0614`), and to state
+  explicitly that WiFi is the active interconnect.
+- Added a naming-mismatch callout in `status.md` per `AGENTS.md`: planning/user
+  docs say `CROSSFIRE-X`, while some historical code/doc references still say
+  `CROSSFIRE v2`.
+- Updated `README.md` so the top-level project description no longer claims that
+  USB4 cable acquisition is required for the current execution path, while still
+  preserving TB4/USB4 as a future option if WiFi underperforms.
+
+### Verification
+
+- `./.venv/bin/pytest`: FAIL. 162 passed, 5 failed, all in
+  `tests/test_gemma4_chunked.py` real-bundle coverage. Failure occurs while
+  loading `models/gemma-4-E2B-coreml/chunk1.mlmodelc` through
+  `ct.models.CompiledMLModel`, which now raises CoreML execution-plan error
+  `-14`.
+- `./.venv/bin/ruff check .`: clean
+- `./.venv/bin/ruff format --check .`: clean
+
+### State at end of session
+
+- Tracker/docs now match the user decision that WiFi is the active interconnect.
+- TB4/USB4 work remains available as an optional future optimization and
+  benchmark path, not as a blocker for current Mac or cluster work.
+- Next actual blockers remain remote-node model prep and Phase 6 calibration,
+  not cable acquisition.
+- Verification is not fully green: the real-bundle Gemma 4 CoreML tests that
+  passed in Session 18 do not currently load on this machine, so that regression
+  remains an open blocker and is recorded in `status.md`.
+
+---
+
 ## Session 18 - 2026-04-22: T-0609a Gemma 4 E2B chunked engine (Python port of ChunkedEngine.swift)
 
 ### What was done

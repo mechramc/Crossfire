@@ -21,12 +21,13 @@ KV compression, and TurboQuant+ weight compression stacked on top.
 
 **Core thesis:** Every Mac in an EXO cluster leaves ~19 TFLOPS of ANE compute dark, and MoE
 models that exceed node memory are completely unservable without expert streaming. CROSSFIRE-X
-lights up both, then uses composed compression to make a USB4 interconnect viable enough that
-cable speed stops being the limiting story.
+lights up both, then uses composed compression to make a consumer interconnect viable enough
+that link speed stops being the limiting story. The current cluster path is WiFi; TB4/USB4
+remains an optional future optimization if the bandwidth budget demands it.
 
 **Secondary questions:**
-- Does composing TriAttention + TurboQuant reduce cross-node KV transfer enough to make USB4
-  effectively invisible for practical inference?
+- Does composing TriAttention + TurboQuant reduce cross-node KV transfer enough to make WiFi
+  practical today and TB4/USB4 effectively invisible if a faster link is added later?
 - Can Flash-MoE slot-bank streaming make Orion Forge (fused specialist MoE) servable at
   real-time inference speeds?
 
@@ -34,12 +35,13 @@ cable speed stops being the limiting story.
 
 | Link | Speed | Latency | Role |
 |------|-------|---------|------|
-| USB4 active cable | 40 Gbps (~4-5 GB/s effective) | ~300 us | Primary EXO data path |
-| 5GbE Ethernet | 5 Gbps | ~500 us | Discovery, control plane, fallback |
+| WiFi | Environment-dependent | Environment-dependent | Current EXO data path and discovery path |
+| TB4/USB4 cable | 40 Gbps (~4-5 GB/s effective) | ~300 us | Optional future optimization |
+| 5GbE Ethernet | 5 Gbps | ~500 us | Optional fallback / control path |
 
-The final build spec assumes USB4 with Thunderbolt IP bridging, not TB5 RDMA. The practical
-claim is that composed compression makes the slower, more common consumer interconnect good
-enough for the target workload.
+The repository currently runs over WiFi rather than TB5 RDMA or Thunderbolt bridging. The
+practical claim is that composed compression makes a slower, more common consumer interconnect
+good enough for the target workload, with TB4/USB4 reserved for future optimization if needed.
 
 ## Hardware Requirements
 
@@ -48,7 +50,7 @@ enough for the target workload.
 | PC | NVIDIA RTX 5090 (32GB) + 64GB DDR5 | EXO compute node: prefill (T1) |
 | Mac | Apple M4 Max (64GB Unified) + NVMe | EXO compute node: decode (T2) + ANE (T3) + expert streaming (T5) |
 
-**Network:** USB4 active cable as the primary EXO path, with 5GbE as the fallback and control link.
+**Network:** WiFi is the current EXO path. TB4/USB4 and 5GbE remain optional future interconnect work.
 
 ## Models
 
@@ -72,12 +74,12 @@ AutoPilot selects the appropriate policy at runtime using a deterministic decisi
 | Policy | Pipeline | ANE | KV Strategy | Weights | Use Case |
 |--------|----------|-----|-------------|---------|----------|
 | P0 | Single best node | Idle | None | FP16/Q8 | Fallback, no distributed overhead |
-| P1 | EXO over USB4 (5090 prefill + Mac decode) | Idle | None | FP16/Q8 | Distributed baseline |
-| P2 | EXO over USB4 | Draft E2B | None | FP16/Q8 | Speculative decode via ANE |
-| P3 | EXO over USB4 | Idle | None | TQ4_1S | Reduce cross-node transfer cost |
-| P4 | EXO over USB4 | Idle | TriAttention | TQ4_1S | Long-context, compressed KV path |
-| P5 | EXO over USB4 | Draft E2B | TriAttention | TQ4_1S | Full-stack stacked compression |
-| P6 | EXO over USB4 | Idle | TriAttention | Flash-MoE | MoE models exceeding node memory |
+| P1 | EXO over current interconnect (WiFi today) | Idle | None | FP16/Q8 | Distributed baseline |
+| P2 | EXO over current interconnect | Draft E2B | None | FP16/Q8 | Speculative decode via ANE |
+| P3 | EXO over current interconnect | Idle | None | TQ4_1S | Reduce cross-node transfer cost |
+| P4 | EXO over current interconnect | Idle | TriAttention | TQ4_1S | Long-context, compressed KV path |
+| P5 | EXO over current interconnect | Draft E2B | TriAttention | TQ4_1S | Full-stack stacked compression |
+| P6 | EXO over current interconnect | Idle | TriAttention | Flash-MoE | MoE models exceeding node memory |
 
 ## Project Structure
 
@@ -115,8 +117,8 @@ ruff check .
 ruff format --check .
 ```
 
-> The final build spec assumes EXO over USB4 plus a 5GbE fallback. Setup scripts and code
-> scaffolds are aligned with that spec; see `status.md` for remaining bring-up work.
+> The current repo reality is EXO over WiFi. USB4 and 5GbE remain optional future interconnect
+> work; see `status.md` for the current bring-up and calibration state.
 
 ## Ablation Matrix (C0-C7)
 
@@ -137,10 +139,10 @@ Controlled offline benchmarking configs that isolate each component's contributi
 
 | Tier | Focus |
 |------|-------|
-| Tier 0 (Day 1-2) | EXO baseline over USB4 + Thunderbolt IP bridge |
+| Tier 0 (Day 1-2) | EXO baseline over the active interconnect |
 | Tier 1 (Day 3-4) | Flash-MoE integration and slot-bank validation |
 | Tier 2 (Day 5-9) | ANE integration + composed TriAttention/TurboQuant compression |
-| Tier 3 (Day 10-12) | AutoPilot routing, USB4-aware policy selection, Orion Forge serving |
+| Tier 3 (Day 10-12) | AutoPilot routing, interconnect-aware policy selection, Orion Forge serving |
 | Write-up (Day 13-15) | Analysis, charts, blog post, community submissions |
 
 ## Results

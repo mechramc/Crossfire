@@ -117,10 +117,10 @@ Rule: Only mark a task done when the code, file, or artifact exists in this repo
 
 - [x] T-0601 Verify PC environment and run `scripts/setup_pc.sh` (Session 15; CUDA 13.2 toolkit + Node 22 prerequisites installed in WSL; EXO source-install + dashboard + CUDA llama.cpp build all green; `~/crossfire/exo/.venv/bin/exo -v` launches cleanly, discovers Mac peer at `192.168.4.41:52415` over WiFi mDNS; API live on `localhost:52415`)
 - [x] T-0602 Verify Mac environment and run `scripts/setup_mac.sh`
-- [!] T-0603 Acquire and verify USB4 40 Gbps active cable
-- [!] T-0604 Configure Thunderbolt IP bridge / TCP-IP networking between nodes
-- [!] T-0605 Measure USB4 throughput between nodes and record baseline
-- [x] T-0606 Validate 5GbE fallback link and discovery path (Session 17; EXO on Mac and PC discovered each other over WiFi mDNS; PC node `12D3KooWLeMLzYwn...3cGM` elected master, Mac demoted to worker at 2026-04-21 15:01:12; observed on Mac dashboard at localhost:52415. 5GbE Ethernet path not tested — WiFi fallback is sufficient for current no-USB4 state)
+- [!] T-0603 Acquire and verify TB4/USB4 40 Gbps cable -- optional future optimization only; not required for current Phase 6 work while WiFi is the active interconnect
+- [!] T-0604 Configure Thunderbolt IP bridge / TCP-IP networking between nodes -- optional future optimization only; use if WiFi throughput is insufficient for target workloads
+- [!] T-0605 Measure TB4/USB4 throughput between nodes and record baseline -- optional future benchmark only; no longer a bring-up blocker while WiFi is the production path
+- [x] T-0606 Validate active discovery path between nodes (Session 17; EXO on Mac and PC discovered each other over WiFi mDNS; PC node `12D3KooWLeMLzYwn...3cGM` elected master, Mac demoted to worker at 2026-04-21 15:01:12; observed on Mac dashboard at localhost:52415. WiFi discovery is the current production path; 5GbE Ethernet and USB4 remain optional future interconnect work)
 - [~] T-0607 Download Gemma 4 31B (`google/gemma-4-31B-it`) model artifacts (fp16 for Mac/MLX + TQ4_1S for PC llama.cpp). Subtasks split by node below
 - [x] T-0607.mac Mac: download fp16 safetensors to `models/gemma-4-31B-it/` — DONE Session 18. `hf download google/gemma-4-31B-it` pulled 58 GB into `models/gemma-4-31B-it/` (2 safetensor shards + index.json + tokenizer + config + chat_template). Consumed by MLX/EXO decode path (T2); Mac P0 baseline T-0614 will convert this to GGUF via `vendor/llama.cpp/convert_hf_to_gguf.py` as part of T-0614 prep.
 - [ ] T-0607.pc PC (WSL2 Ubuntu): steps to run on PC node —
