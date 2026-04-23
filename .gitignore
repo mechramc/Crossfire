@@ -52,6 +52,9 @@ models/
 # Raw benchmark data (processed results ARE tracked)
 results/raw/
 
+# Local datasets (regeneratable from HF or upstream sources)
+datasets/
+
 # External source clones managed by setup scripts (EXO llama.cpp fork, ANEMLL, Rustane)
 vendor/
 

@@ -1,0 +1,270 @@
+{
+  "task_group": [
+    "T-0615",
+    "T-0616"
+  ],
+  "node": "mac-m4-max-64gb",
+  "session": 25,
+  "date": "2026-04-23",
+  "wikitext_corpus": "datasets/wiki.test.raw (Salesforce/wikitext wikitext-2-raw-v1 test split, 4358 rows, 241K words, 1.2 MB)",
+  "ppl_config": {
+    "ctx": 512,
+    "chunks": 20,
+    "seed": 1,
+    "note": "prompt-eval-only; no decode"
+  },
+  "power_config": {
+    "tool": "powermetrics",
+    "samplers": "cpu_power,gpu_power,ane_power",
+    "interval_ms": 1000,
+    "active_threshold_mW": 1000,
+    "note": "captured during decode smoke; active samples filtered to GPU > 1W to exclude idle start/end"
+  },
+  "variants": [
+    {
+      "id": "v1_31b_q8_0",
+      "label": "Gemma 4 31B Q8_0 (stock)",
+      "model": "models/gemma-4-31B-Q8_0.gguf",
+      "binary": "vendor/llama.cpp/build/bin/llama-cli (decode) / llama-perplexity (PPL)",
+      "mode": "stock",
+      "t0615_perplexity": {
+        "ppl": 11895.7805,
+        "ppl_stderr": 1233.67791,
+        "chunks_scored": 20,
+        "per_chunk_cumulative": [
+          420.5597,
+          3281.9113,
+          5394.6964,
+          10231.167,
+          9314.1999,
+          10792.4495,
+          14302.2436,
+          15896.7457,
+          16365.7138,
+          19111.1188,
+          18644.0587,
+          18092.9624,
+          19369.8932,
+          16409.1137,
+          15987.4917,
+          14969.5047,
+          12318.7282,
+          12958.4,
+          11472.2049,
+          11895.7805
+        ]
+      },
+      "t0616_decode_perf": {
+        "prompt_tok_s": 14.9,
+        "decode_tok_s": 14.6
+      },
+      "t0616_power": {
+        "total_samples": 180,
+        "active_samples": 14,
+        "cpu_active": {
+          "n": 6,
+          "mean_mW": 81,
+          "peak_mW": 96
+        },
+        "gpu_active": {
+          "n": 14,
+          "mean_mW": 31699,
+          "peak_mW": 38005
+        },
+        "ane_active": {
+          "n": 6,
+          "mean_mW": 0,
+          "peak_mW": 0
+        },
+        "cpu_all": {
+          "n": 90,
+          "mean_mW": 2098,
+          "peak_mW": 9214
+        },
+        "gpu_all": {
+          "n": 180,
+          "mean_mW": 2480,
+          "peak_mW": 38005
+        },
+        "ane_all": {
+          "n": 90,
+          "mean_mW": 0,
+          "peak_mW": 0
+        }
+      },
+      "tok_per_joule_decode": 0.459,
+      "sources": {
+        "ppl_log": "results/raw/t0615_mac_31B_Q8_ppl.log",
+        "decode_log": "results/raw/t0616_mac_31B_Q8_decode.log",
+        "power_log": "results/raw/t0616_mac_31B_Q8_decode_power.log"
+      }
+    },
+    {
+      "id": "v2_26b_a4b_stock",
+      "label": "Gemma 4 26B-A4B fp16 stock",
+      "model": "models/gemma-4-26B-A4B-fp16.gguf",
+      "binary": "vendor/anemll-flash-llama.cpp/build/bin/llama-completion / llama-perplexity",
+      "mode": "stock",
+      "t0615_perplexity": {
+        "ppl": 57162.8009,
+        "ppl_stderr": 6273.12261,
+        "chunks_scored": 20,
+        "per_chunk_cumulative": [
+          5997.3993,
+          13805.3141,
+          8663.2578,
+          14226.377,
+          17034.9569,
+          29968.5289,
+          45399.5179,
+          42208.6285,
+          52097.3166,
+          50976.994,
+          50011.5807,
+          51716.0872,
+          59610.8829,
+          56695.0964,
+          54646.2267,
+          56518.7114,
+          52908.4119,
+          52107.3794,
+          51471.2641,
+          57162.8009
+        ]
+      },
+      "t0616_decode_perf": {
+        "load_ms": 37031.53,
+        "prompt_tok_s": 54.52,
+        "decode_tok_s": 50.29,
+        "decode_tokens": 63
+      },
+      "t0616_power": {
+        "total_samples": 180,
+        "active_samples": 6,
+        "cpu_active": {
+          "n": 6,
+          "mean_mW": 87,
+          "peak_mW": 105
+        },
+        "gpu_active": {
+          "n": 6,
+          "mean_mW": 17152,
+          "peak_mW": 27014
+        },
+        "ane_active": {
+          "n": 6,
+          "mean_mW": 0,
+          "peak_mW": 0
+        },
+        "cpu_all": {
+          "n": 90,
+          "mean_mW": 1838,
+          "peak_mW": 44641
+        },
+        "gpu_all": {
+          "n": 180,
+          "mean_mW": 590,
+          "peak_mW": 27014
+        },
+        "ane_all": {
+          "n": 90,
+          "mean_mW": 0,
+          "peak_mW": 4
+        }
+      },
+      "tok_per_joule_decode": 2.917,
+      "sources": {
+        "ppl_log": "results/raw/t0615_mac_26B_A4B_stock_ppl.log",
+        "decode_log": "results/raw/t0616_mac_26B_A4B_stock_decode.log",
+        "power_log": "results/raw/t0616_mac_26B_A4B_stock_decode_power.log"
+      }
+    },
+    {
+      "id": "v3_26b_a4b_slot_bank",
+      "label": "Gemma 4 26B-A4B fp16 slot-bank (16 slots, topk=8, prefetch-temporal)",
+      "model": "models/gemma-4-26B-A4B-fp16.gguf + results/flashmoe_sidecar/gemma-4-26B-A4B/",
+      "binary": "vendor/anemll-flash-llama.cpp/build/bin/llama-completion / llama-perplexity",
+      "mode": "slot-bank",
+      "t0615_perplexity": {
+        "ppl": 38956.8405,
+        "ppl_stderr": 4244.54234,
+        "chunks_scored": 20,
+        "per_chunk_cumulative": [
+          6029.9286,
+          8315.7044,
+          6191.8684,
+          7486.4884,
+          9603.9806,
+          15755.6393,
+          26211.5616,
+          21335.0246,
+          28619.9067,
+          25551.1653,
+          27247.4334,
+          28498.531,
+          34665.9173,
+          32962.4726,
+          32981.9725,
+          32363.7454,
+          31278.4371,
+          34932.8571,
+          35356.5778,
+          38956.8405
+        ]
+      },
+      "t0616_decode_perf": {
+        "load_ms": 5104.39,
+        "prompt_tok_s": 5.15,
+        "decode_tok_s": 8.3,
+        "decode_tokens": 63
+      },
+      "t0616_power": {
+        "total_samples": 240,
+        "active_samples": 18,
+        "cpu_active": {
+          "n": 18,
+          "mean_mW": 1585,
+          "peak_mW": 13833
+        },
+        "gpu_active": {
+          "n": 18,
+          "mean_mW": 3339,
+          "peak_mW": 5958
+        },
+        "ane_active": {
+          "n": 18,
+          "mean_mW": 0,
+          "peak_mW": 0
+        },
+        "cpu_all": {
+          "n": 120,
+          "mean_mW": 1663,
+          "peak_mW": 18822
+        },
+        "gpu_all": {
+          "n": 240,
+          "mean_mW": 291,
+          "peak_mW": 5958
+        },
+        "ane_all": {
+          "n": 120,
+          "mean_mW": 0,
+          "peak_mW": 0
+        }
+      },
+      "tok_per_joule_decode": 1.686,
+      "sources": {
+        "ppl_log": "results/raw/t0615_mac_26B_A4B_slotbank_ppl.log",
+        "decode_log": "results/raw/t0616_mac_26B_A4B_slotbank_decode.log",
+        "power_log": "results/raw/t0616_mac_26B_A4B_slotbank_decode_power.log"
+      }
+    }
+  ],
+  "findings": [
+    "PPL is very high across all three Gemma-4-IT variants on wikitext-2-raw-v1 (range 11896 to 57163). This is the expected 'IT model on raw continuation' signal: the models are instruction-tuned, not base language models, so they score raw-text continuation poorly. Google does not release base weights for Gemma 4. Relative comparisons across variants are still meaningful.",
+    "Slot-bank PPL (38957) differs from stock PPL (57163) by ~32% on the same 26B-A4B GGUF \u2014 the Flash-MoE slot-bank path is NOT bit-identical to the stock MoE kernel on Gemma 4. Chunk 1 matches within <1% (5997 stock vs 6030 slot-bank), but subsequent chunks diverge, likely from --moe-prefetch-temporal biasing subsequent routing. Slot-bank is actually LOWER PPL (better) here, which is surprising \u2014 worth investigating whether stock mode is numerically off vs slot-bank's routing is closer to the intended Gemma 4 behavior.",
+    "Decode throughput confirms prior measurements: 31B Q8_0 = 14.6 tok/s, 26B-A4B stock fp16 = 50.3 tok/s, 26B-A4B slot-bank fp16 = 8.3 tok/s (6x slowdown from stock, consistent with 95%-IO-bound slot-bank path).",
+    "Slot-bank hit rate was 60.5% at ctx=2048, slightly above the 57.9% measured at ctx=4096 in T-0612 Session 24 \u2014 smaller context reduces expert working-set pressure.",
+    "Prefill perplexity run was fast on 26B-A4B stock (1606 tok/s prefill) because MoE 4B-active routing is lightweight for the prefill pass compared to dense 31B (269 tok/s)."
+  ]
+}

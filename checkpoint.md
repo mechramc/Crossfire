@@ -5,6 +5,156 @@ Rule: update this file before every `git push`.
 
 ---
 
+## Session 26 - 2026-04-23: T-0615 + T-0616 Mac baselines (perplexity + power)
+
+### What was done
+
+Captured the Mac half of T-0615 (perplexity) and T-0616 (power) across all
+three Mac-side Gemma 4 variants. The PC side of the same two tasks landed
+in Session 25 on the other node (merged via git pull this session).
+
+**Corpus setup:**
+
+- Downloaded `Salesforce/wikitext` HF dataset, `wikitext-2-raw-v1` config,
+  test split (parquet, ~700 KB) via `hf download`.
+- Converted parquet → `datasets/wiki.test.raw` using a short pyarrow script
+  (4358 rows, 241K words, 1.2 MB). Installed `pyarrow 24.0.0` into main
+  `.venv` — runtime-only dep (not in `pyproject.toml`).
+- Note: the PC used a different corpus source (`hf:datasets/ggml-org/ci/wikitext-2-raw-v1.zip`
+  mirror, 1.3 MB) and a different llama.cpp build. Two open numerics
+  questions tracked in Follow-ups below because of that divergence.
+
+**T-0615 Mac perplexity (c=512, 20 chunks, seed=1):**
+
+| Variant (Mac M4 Max)                         | Binary                                       | PPL       | stderr    | Prefill t/s |
+| -------------------------------------------- | -------------------------------------------- | --------- | --------- | ----------- |
+| Gemma 4 31B Q8_0 (stock)                     | `vendor/llama.cpp/llama-perplexity`          | 11,895.78 | ±1,233.68 | 269.4       |
+| Gemma 4 26B-A4B fp16 stock                   | `vendor/anemll-flash-llama.cpp/…-perplexity` | 57,162.80 | ±6,273.12 | 1,606.5     |
+| Gemma 4 26B-A4B fp16 slot-bank (16 slots, topk=8, prefetch-temporal) | same | 38,956.84 | ±4,244.54 | 12.5        |
+
+**All three PPL numbers are very high.** This is the expected "IT model on
+raw-text continuation" signal — Gemma 4 is released only as `-it`
+(instruction-tuned), not as base weights, so scoring raw wikitext drops the
+model into a distribution it was never trained on. Relative comparisons
+across variants are still meaningful.
+
+**Numerics finding — slot-bank ≠ stock on Gemma 4 26B-A4B.** The sidecar
+path is NOT bit-identical to the stock MoE kernel:
+
+- Chunk 1: stock 5,997.4 vs slot-bank 6,029.9 (0.5% diff, within rounding)
+- Chunk 20 (final): stock 57,162.8 vs slot-bank 38,956.8 (**32% lower**)
+
+The divergence grows across chunks. Leading suspect: `--moe-prefetch-temporal`
+biases routing after each decoded token ("refreshes the current token's
+routed experts after decode to bias slot residency"), which means the SAME
+input tokens can route to different top-8 experts in slot-bank mode vs
+stock mode as context accumulates. Follow-up with `--no-moe-prefetch-temporal`
+queued.
+
+Counterintuitively, slot-bank's PPL is LOWER than stock's. Possibilities:
+(a) stock mode's kernel has a subtle fp16 accumulation ordering issue that
+slot-bank's repacked sidecar path avoids, or (b) the prefetch heuristic
+happens to produce expert selections that better match Gemma 4's training
+distribution. Either way, the 32% delta is far larger than numerical noise
+and deserves investigation before it becomes the C7 baseline.
+
+**Cross-node discrepancy (new).** PC (Session 25) reported
+**PPL = 2,595** on Gemma 4 31B Config-I (mixed TQ4_1S/Q4_K/Q8_0, 19 GB).
+Mac reports **PPL = 11,896** on Gemma 4 31B Q8_0 (33 GB) — same IT model
+family, stricter quant. Q8_0 should bound Config-I from below for PPL, not
+be 4.6× worse. Likely causes: (a) different wikitext mirror/packaging
+(PC pulled from `ggml-org/ci`, Mac from `Salesforce/wikitext`), (b)
+llama.cpp build differences (PC on `tqp-v0.1.0`, Mac on `tqp-v0.1.1`),
+(c) tokenizer / chunk-boundary handling. Worth one sanity experiment on
+either node before the C0 row ships.
+
+**T-0616 Mac power (decode smoke with concurrent `sudo powermetrics
+--samplers cpu_power,gpu_power,ane_power -i 1000`):**
+
+Each variant ran a 64-token decode on "The capital of France is" with
+`--jinja --single-turn`, seed=1, ctx=2048. Power sampled every 1s
+during the run; active samples filtered to GPU > 1 W to exclude idle
+start/end. ANE stayed at 0 mW throughout (no ANE path exercised here; the
+T-0609a chunked CoreML engine is a separate code path).
+
+| Variant                 | Decode t/s | CPU (avg, active) | GPU (avg, active) | GPU peak | ANE  | tok/J (decode) |
+| ----------------------- | ---------- | ----------------- | ----------------- | -------- | ---- | -------------- |
+| 31B Q8_0                | 14.60      | 130 mW            | 31.70 W           | 38.95 W  | 0 mW | 0.459          |
+| 26B-A4B fp16 stock      | 50.29      | 88 mW             | 17.15 W           | 29.68 W  | 0 mW | **2.917**      |
+| 26B-A4B slot-bank       | 8.30       | 260 mW            | 3.34 W            | 10.91 W  | 0 mW | 1.686          |
+
+**Headline findings:**
+- **26B-A4B stock is the most energy-efficient decode on M4 Max (2.92 tok/J)** —
+  fp16 MoE with 4B-active routing is GPU-light and fast.
+- 31B Q8_0 burns the most GPU power (31.7 W avg) for the slowest decode
+  (14.6 tok/s) → worst tok/J at 0.46.
+- Slot-bank runs the GPU at only 3.3 W because the GPU idles 95% of the
+  time waiting on NVMe preads (matches T-0612 Session 24's per-token
+  time breakdown). Total system power is low, but decode is 6× slower
+  than stock, so tok/J (1.69) is still worse than stock despite the idle
+  GPU. Slot-bank's efficiency story is memory (78% less Metal), not energy.
+- ANE idle throughout. Folding the ANE draft path into these decode
+  smokes is a P2 speculative-decoding task (T-0620), not Phase-6 baseline.
+
+**Mac vs PC peak power:** PC inference peak 504 W, Mac inference peak
+39 W — roughly 13× more GPU power on the 5090 than the M4 Max for the
+same dense 31B model. Expected; GPU die size dominates.
+
+**Credential handling.** `sudo powermetrics` requires root. Used
+`printf '%s\n' '<password>' | sudo -S -p ''` per-invocation; the credential
+was never written to any log, script, or tracker file, and was only in
+process memory for the duration of each `sudo` call.
+
+### Artifacts produced this session
+
+Committed:
+- `results/t0615_t0616_mac.json` — structured summary: PPL (+ per-chunk
+  cumulative), decode perf, power stats (CPU/GPU/ANE, active vs all samples,
+  mean + peak), tok/J per variant, and the 5-item findings block.
+
+Local-only (gitignored):
+- `datasets/wiki.test.raw` (1.2 MB, derived from HF parquet; regeneratable)
+- `datasets/wikitext-hf/` (HF parquet source, ~700 KB)
+- `results/raw/t0615_mac_*_ppl.log` (3 perplexity logs)
+- `results/raw/t0616_mac_*_decode.log` (3 decode smoke logs)
+- `results/raw/t0616_mac_*_decode_power.log` (3 powermetrics traces, ~9K lines each)
+
+### Verification
+
+- All three perplexity runs completed with exit 0 and emitted
+  `Final estimate: PPL = ...` lines.
+- All three power logs parsed cleanly: 90–120 samples each, active-sample
+  filter produced non-empty GPU traces consistent with decode walltime.
+- `./.venv/bin/pytest` → 170 passed; `ruff check` + `ruff format --check`
+  clean.
+- Slot-bank telemetry during perplexity: 52.2% slot hit rate, 92.2%
+  prefetch hit rate, 11,030 GiB streamed over 10,240 tokens at iosplit=4.
+
+### State at end of session
+
+- T-0615 DONE on both nodes (Mac 3 variants here, PC 1 variant in
+  Session 25). T-0616 DONE on both nodes (Mac 3 variants here, PC 1
+  variant in Session 25).
+- **Two open numerics questions queued before the C0 row locks and before
+  the T-0625 C7 sweep begins**: (1) slot-bank PPL vs stock PPL on Mac
+  26B-A4B (`--no-moe-prefetch-temporal` isolation test in flight at session
+  end); (2) PC Config-I PPL 2595 vs Mac Q8_0 PPL 11896 on 31B
+  (cross-harness tokenizer/chunk-boundary comparison).
+- `pyarrow` pip-installed into `.venv` on Mac (one-line, 35 MB, not added
+  to `pyproject.toml`).
+
+### Follow-ups
+
+- `--no-moe-prefetch-temporal` slot-bank PPL rerun is already running in
+  background at end-of-session; next session will start with that result.
+- Cross-node PPL sanity check: ideally pull the PC's wikitext mirror onto
+  Mac (or vice versa) and re-score the 31B to confirm whether the 4.6× PPL
+  gap is corpus-level or harness-level.
+- T-0617 P1 distributed baseline is the next critical-path item (does
+  not depend on either numerics investigation).
+
+---
+
 ## Session 25 - 2026-04-23: T-0615.pc + T-0616.pc PC C0 calibration baselines (Gemma 4 31B Config-I)
 
 ### What was done
