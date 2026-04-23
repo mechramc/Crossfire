@@ -52,8 +52,11 @@ models/
 # Raw benchmark data (processed results ARE tracked)
 results/raw/
 
-# Local datasets (regeneratable from HF or upstream sources)
-datasets/
+# Local datasets (mostly regeneratable from HF). Files inside are ignored
+# by default; exceptions below keep a small canonical set tracked so both
+# nodes score perplexity against byte-identical corpora.
+datasets/*
+!datasets/wiki.test.raw
 
 # External source clones managed by setup scripts (EXO llama.cpp fork, ANEMLL, Rustane)
 vendor/
