@@ -306,6 +306,130 @@ Local-only (gitignored):
 
 ---
 
+## Session 27 (parallel, PC-side) - 2026-04-24: Gemma 4 EXO Pipeline port — tuple fix lands, inference blocked on `mx_barrier`
+
+> Concurrent with the Mac-side numerics close-out above. Same day, separate
+> code path on EXO branch `feat/gemma4-pipeline-port`. Reaches the same
+> upstream blocker as Session 28 (broken MLX CUDA ring backend) via a
+> different route — `mx_barrier` calls `mx.distributed.all_sum`, which
+> hangs for the same reason MlxRing tensor-parallel falls back to CPU.
+
+### What was done
+
+Executed Tasks 1–5 + first half of Task 6 of
+`docs/plans/2026-04-24-gemma4-exo-pipeline-port.md` on the EXO branch
+`feat/gemma4-pipeline-port` in
+`\\wsl.localhost\Ubuntu\home\mechramc\crossfire\exo`. Goal: make
+`mlx-community/gemma-4-31b-it-4bit` shardable in Pipeline mode across
+the PC (rank 0, RTX 5090) + Mac (rank 1, M4 Max) cluster.
+
+**Tuple-passthrough fix (EXO commit `94c0ce6`).** First inference attempt
+crashed at `auto_parallel.py:175` with
+`ValueError: Invalid type tuple received in array initialization`. Root
+cause: `Gemma4TextModel.DecoderLayer.__call__` returns a 3-tuple
+`(h, shared_kv, offset)` (see
+`mlx_lm/models/gemma4_text.py:380`; the outer model loop at
+`gemma4_text.py:555` does `h, kvs, offset = layer(...)`). The
+`PipelineLastLayer.__call__` wrapper was treating that return value as a
+bare `mx.array` and feeding the whole tuple straight into
+`mx.distributed.send`. Fix detects tuple returns, sends only `output[0]`
+across the rank boundary, and rebuilds the tuple shape so the outer
+loop's unpacking still works. `PipelineFirstLayer.__call__` had its
+return annotation relaxed to `mx.array | tuple[object, ...]` for the
+round-trip through rank 0. Two contract tests added in
+`src/exo/worker/engines/mlx/tests/test_gemma4_pipeline_shard.py`:
+`test_pipeline_last_layer_tuple_passthrough` (mocks a layer returning a
+3-tuple, monkeypatches send/all_gather, asserts only `h` crosses the
+wire and the full tuple is returned) and
+`test_pipeline_last_layer_bare_array_unchanged` (backward-compat guard).
+7/7 pass. Pre-existing ruff B905 (`zip(..., strict=True)`) and I001
+(import order) issues fixed in the same commit. Bundle exported to
+`/home/mechramc/handoff/gemma4-pipeline-fix-94c0ce6.bundle` (3,714 B,
+SHA256 `6ac9f06075e8da9650b7fbcdff584be480c71583b42d82bd83e723e17502d83f`,
+parent `d9959da`) and copied to
+`C:\Users\mechr\Downloads\gemma4-pipeline-fix-94c0ce6.bundle` for Mac
+fetch.
+
+**Task 6 load path works.** With the tuple fix in place, the model loads
+cleanly: PC ranks 30 layers, Mac ranks 30 layers, `Time taken to shard
+and load model: 45.62 s` cold on the PC rank, no `ValueError`, no KV
+co-location warning.
+
+**Task 7 inference blocked on `mx_barrier` hang.** Three attempts:
+
+| Attempt | Outcome                                                                 |
+| ------- | ----------------------------------------------------------------------- |
+| 1       | Hung at `mx_barrier` (`generate.py:326`); never reached "Starting prefill" |
+| 2       | Cleared barrier; surfaced the tuple `ValueError` (root cause for fix)  |
+| 3       | Hung at `mx_barrier` again for 7+ min                                  |
+
+py-spy on PC runner PID 314489 (via `/home/mechramc/pyspy_runner.sh`,
+needed because direct `wsl.exe py-spy` invocation tripped the
+`C:/Program: No such file or directory` quoting bug) caught the stack
+pinned at `mx_barrier (utils_mlx.py:774)` called from `prefill
+(generate.py:326)`. The "Starting prefill" log line at `generate.py:327`
+never fires. Pattern is consistent with a transport handshake race in
+`mx.distributed` ring init over WiFi — the current `mx_barrier` has no
+timeout/diagnostic, so failures are silent hangs.
+
+**Diagnostic correction.** Mid-attempt-3 I called the dmon trace
+(sm=10%, mem=25–30%, fb=13447 MB, ~25 MB/s rxpci/txpci) "decode in
+progress." Mac claude correctly reconciled: 0 SSE token events, 0
+prefill_progress events, 43 keep-alives, Mac runner 100% CPU 7:52, log
+frozen at "Using MLX LM's make cache." That activity was background MLX
+runtime drain (lazy `make_cache` evals + ring transport heartbeat), not
+decode. py-spy confirmed: stuck at the first barrier, before prefill
+ever started.
+
+**Cleanup.** EXO master 299796 stopped with SIGTERM; GPU back to 1.8 GB
+idle. Leftover monitor PIDs killed (314652=dmon, 314653/4/5=pollers).
+Stale `sudo py-spy` (317525) cleared. Capture logs preserved at
+`/home/mechramc/capture/` under tags `20260424_140633` and
+`20260424_142500_post_fix`.
+
+### Files changed (EXO branch `feat/gemma4-pipeline-port` @ 94c0ce6)
+
+- `src/exo/worker/engines/mlx/auto_parallel.py` —
+  `PipelineLastLayer.__call__` tuple detection + extras passthrough;
+  `PipelineFirstLayer.__call__` return annotation relaxed.
+- `src/exo/worker/engines/mlx/tests/test_gemma4_pipeline_shard.py` —
+  +2 contract tests; ruff cleanups.
+
+### Files changed (this repo, Session 27)
+
+- `docs/plans/2026-04-24-gemma4-exo-pipeline-port.md` — Task 6 status
+  block + Task 7 next-session unblock options.
+- `tasks.md` — T-0617 marked `[~]` with current state + bundle SHA.
+- `status.md` — Session 27 entry at top.
+- `checkpoint.md` — this entry.
+
+### Helper scripts (WSL2-side, ad-hoc)
+
+- `/home/mechramc/pyspy_runner.sh` — wraps `py-spy dump --pid` to dodge
+  wsl.exe quoting bug.
+- `/home/mechramc/start_monitors_post_fix.sh` — relaunches dmon (with
+  `stdbuf -oL` to fix nvidia-smi line-buffering), /proc/stat, net,
+  meminfo pollers via `setsid` so they survive parent exit.
+- `/home/mechramc/restart_monitors.sh` — earlier variant of the same.
+
+### Open / next session
+
+1. Add a watchdog + timeout + peer-state dump around `mx_barrier` in
+   `generate.py:326` so the hang is no longer silent.
+2. Add per-layer ring logs at `PipelineFirstLayer.recv` /
+   `PipelineLastLayer.send` so a hang inside the layer ring is
+   distinguishable from a hang at the prefill barrier.
+3. Try restarting only the PC runner (not the master) on each fresh
+   inference attempt to isolate whether the race is per-process vs
+   per-cluster init.
+4. **Session 28 reconciliation**: with the upstream MLX CUDA ring
+   diagnosis now confirmed, options 1–3 above will only buy diagnostic
+   visibility, not a working pipeline. Until MLX lands the CUDA ring
+   fix or EXO exposes disaggregated prefill/decode, the EXO branch
+   `feat/gemma4-pipeline-port` should be parked at commit `94c0ce6`.
+
+---
+
 ## Session 26 - 2026-04-23: T-0615 + T-0616 Mac baselines (perplexity + power)
 
 ### What was done

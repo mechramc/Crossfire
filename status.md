@@ -1,6 +1,59 @@
 # CROSSFIRE-X Status
 
-Last updated: 2026-04-23 (Session 28)
+Last updated: 2026-04-24 (Session 28)
+
+## Session 28 / Session 27 — T-0617 distributed P1 baseline blocked upstream (MLX CUDA ring)
+
+**Headline (Session 28, Mac-side):** T-0617 is **blocked upstream by an MLX
+limitation we cannot patch around on the Crossfire side**. EXO 1.0's
+MlxRing tensor-parallel ring backend silently falls back to CPU on
+Linux/WSL2 CUDA peers (MLX 0.31.1 has no working CUDA ring
+implementation; independent dev.to repro matches our findings). Got
+libp2p topology + MlxRing init + a skip-warmup patch all working;
+LoadModel completes on Mac in ~12 s, but PC runs the model on CPU
+(RTX 5090 idle at 8% util, 65 W) and the first prefill never produces
+a decode token within the 5-min master inactivity timeout. Full
+journey + measurements in `results/t0617_p1_distributed_baseline.json`.
+Recommendation: ship C0–C7 matrix without C1; revisit when upstream
+MLX lands the CUDA ring fix or when EXO exposes disaggregated
+prefill/decode.
+
+**Session 27 PC-side EXO branch work (complementary, separate code path).**
+On EXO branch `feat/gemma4-pipeline-port` in
+`\\wsl.localhost\Ubuntu\home\mechramc\crossfire\exo`, executed Tasks
+1–6 of `docs/plans/2026-04-24-gemma4-exo-pipeline-port.md` to lift the
+EXO Pipeline-mode ban for Gemma 4 (the ban that pushed Session 28 onto
+the broken Tensor/MlxRing path). Pipeline LOAD now works: PC ranks 30
+layers, Mac ranks 30 layers, model loads ~46 s cold. **Tuple-passthrough
+fix landed** at EXO commit `94c0ce6` — root cause was
+`Gemma4TextModel.DecoderLayer` returning `(h, shared_kv, offset)` while
+`PipelineLastLayer.__call__` treated it as a bare `mx.array` and fed
+the tuple straight into `mx.distributed.send`. Fix detects tuples,
+sends only `output[0]`, rebuilds the tuple shape on return. Two
+contract tests added in
+`src/exo/worker/engines/mlx/tests/test_gemma4_pipeline_shard.py`;
+7/7 pass. Bundle:
+`C:\Users\mechr\Downloads\gemma4-pipeline-fix-94c0ce6.bundle`,
+SHA256 `6ac9f06075e8da9650b7fbcdff584be480c71583b42d82bd83e723e17502d83f`,
+parent `d9959da`.
+
+Pipeline-mode INFERENCE then hangs at `mx_barrier` (`generate.py:326`,
+called from `prefill`) on the first collective after
+`mx.distributed.init` over WiFi. py-spy on PC runner PID 314489 caught
+the stack pinned at `mx_barrier (utils_mlx.py:774)` for 7+ minutes with
+no "Starting prefill" log emitted. **Same upstream root cause as
+Session 28**: `mx_barrier` calls `mx.distributed.all_sum`, which routes
+through the same broken CUDA ring backend that made the Tensor path
+fall back to CPU. Pipeline-mode lifts the *EXO-side* rejection but
+does not (and cannot) fix the *MLX-side* CUDA ring stub.
+
+EXO shut down clean; GPU back to 1.8 GB idle. All capture monitors
+(dmon + /proc/stat + net + meminfo pollers) killed; logs preserved at
+`/home/mechramc/capture/{exo_pc_,nvidia_dmon_,mpstat_,net_,meminfo_}*_20260424_140633.log`
+and the post-fix tag `20260424_142500_post_fix`.
+
+---
+
 Branch: main
 Tracker state: software-layer tasks closed; Phase 6 calibration work in progress on both nodes. T-0601 (PC), T-0602 (Mac), and T-0606 (active WiFi discovery path) are done; EXO PC is cluster Master, Mac is Worker. **T-0607.mac/pc both done** — Mac has fp16 safetensors + Q8_0 GGUF, PC has Config-I (TQ4_1S/Q4_K/Q8_0 mixed) GGUF + tqp-v0.1.0 CUDA toolchain at `~/llama-cpp-v010/`. **T-0613 PC P0 baseline** (C0 reference) recorded: Gemma 4 31B Config-I on RTX 5090, prefill 139.45 tok/s / decode 42.76 tok/s. **T-0612.pc DONE Session 23**: Gemma 4 26B-A4B downloaded (49 GB HF), converted to fp16 GGUF (50.5 GB, 658 tensors), quantized to TQ4_1S (15 GB, 5.06 BPW). RTX 5090 smoke: **prefill 148.96 tok/s / decode 157.60 tok/s** — 3.7x faster than dense 31B due to MoE 4B-active routing. **T-0615.pc + T-0616.pc DONE Session 23**: PC C0 calibration baselines on Gemma 4 31B Config-I — wikitext-2-raw-v1 perplexity **PPL = 2595.39 ± 268.92**; GPU power profile **idle 31 W → inference peak 504 W (96.2% VRAM, 42 °C, 100% util)**, steady-state mean 429 W, 13.8× idle. **T-0615.mac + T-0616.mac DONE Session 25**: 3 variants each — 31B Q8_0 / 26B-A4B fp16 stock / 26B-A4B fp16 slot-bank. Mac PPLs 11,896 / 57,163 / 38,957 (all IT-on-continuation, high-by-design); decode throughput 14.6 / 50.3 / 8.3 tok/s; GPU power 31.7 / 17.2 / 3.3 W; tok/J 0.46 / **2.92** (best) / 1.69. **Two numerics questions flagged for pre-C7-sweep investigation**: (a) slot-bank PPL diverges 32% from stock on Mac 26B-A4B — `--moe-prefetch-temporal` is leading suspect; (b) PC Config-I PPL (2595) is 4.6× lower than Mac Q8_0 PPL (11896) on the same 31B IT model — Q8_0 should be cleaner than Config-I, so cross-harness tokenization/chunking should be compared. **T-0612 (Mac Flash-MoE extractor validation) CLOSED Session 24**: same fp16 GGUF on Mac, sidecar extracted + byte-verified (46.0 GB, 30 layers, 60 entries), stock Gemma 4 26B-A4B fp16 decode **49.46 tok/s at 48.4 GB Metal**, slot-bank (16 slots, topk=8) decode **7.17 tok/s at 10.3 GB Metal with 57.9% slot-bank hit rate + 97.8% prefetch hit rate**; runtime wrapper patched to use `llama-completion` + `--jinja --single-turn` + closed stdin (the fork's `llama-cli` is not usable for batch completions). T-0609a Gemma 4 E2B chunked CoreML engine DONE: `src/crossfire/ane/gemma4_chunked.py` loads 3 stateful chunks (MLState API), generates coherent text ("Paris" for "The capital of France is"), 42.98 tok/s decode / 138.9 ms TTFT on M4 Max ANE. T-0610 Rustane and Mac half of T-0611 complete. Project venv on Python 3.13.12 (coremltools 9.0 has no working native wheel for 3.14). WiFi is the active interconnect; T-0603/T-0604/T-0605 remain optional future TB4/USB4 work if WiFi throughput proves insufficient, but they are not current blockers.
 
