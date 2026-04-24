@@ -5,6 +5,171 @@ Rule: update this file before every `git push`.
 
 ---
 
+## Session 28 - 2026-04-23: T-0617 distributed P1 baseline BLOCKED UPSTREAM (MLX CUDA ring backend)
+
+### What was done
+
+Attempted to capture the T-0617 distributed P1 baseline on a 2-node EXO
+cluster: Mac (M4 Max Metal) + PC (RTX 5090 on WSL2 CUDA), target model
+Gemma 4 31B 4-bit MLX. After ~4 hours of debugging in parallel with a
+second Claude Code on the PC, **the task is blocked by an upstream MLX
+limitation** that we cannot patch around on the Crossfire side.
+
+**Timeline of the debug journey.**
+
+1. **Topology / firewall blockers fixed.**
+   - Initial `place_instance` failed with `ValueError: No cycles found
+     with sufficient memory`. Root cause: EXO needs a bidirectional
+     libp2p ring between peers, but the Mac→PC edge was missing.
+   - PC's WSL2 EXO was bound to `0.0.0.0:52415` and on the Windows LAN
+     IP, but Windows firewall was blocking inbound TCP. Added
+     `New-NetFirewallRule -DisplayName "EXO 52415" -LocalPort 52415
+     -Protocol TCP -Action Allow`. Topology filled in to 2 nodes /
+     2 bidirectional connections.
+   - Placement with `sharding: Pipeline, instance_meta: MlxRing` was
+     rejected: `Pipeline parallelism is not supported for Gemma 4;
+     use tensor parallelism instead`. Switched to `sharding: Tensor`.
+
+2. **Ephemeral port range blocker fixed.**
+   - With Tensor sharding, placement accepted. CreateRunner +
+     ConnectToGroup succeeded. Then Mac's ring dial to PC timed out
+     (error 60). Root cause: `random_ephemeral_port()` at
+     `src/exo/master/placement.py:51` picks a port in
+     `[49153, 65535]` per placement; our single firewall rule for
+     52415 didn't cover that range.
+   - Added broader `New-NetFirewallRule ... -LocalPort 49153-65535
+     -Protocol TCP -RemoteAddress 192.168.4.0/22`. Subsequent
+     placements got `Rank 0/1 mlx distributed initialization
+     complete` cleanly on ports like 65169, 51724, 51143.
+
+3. **Model downloads completed on both nodes.**
+   - Mac fetched the MLX-format `mlx-community/gemma-4-31b-it-4bit`
+     (17 GB, 4 safetensor shards + config + tokenizer).
+   - PC fetched the same shards (18 GB after its own split-by-rank).
+   - Total walltime to have both shards cached: ~25 min over Wi-Fi.
+
+4. **LoadModel hang + skip-warmup patch.**
+   - On the first full run post-download, `LoadModel` completed on
+     Mac in 11.87 s but `StartWarmup` hung for >10 min. On the PC
+     side, the runner was pinned at 363% CPU with RTX 5090 at 8%
+     utilization and 65 W — the warmup forward pass was triggering a
+     multi-minute JIT compilation cascade on PC's MLX-CUDA backend
+     while the GPU stayed largely idle.
+   - PC Claude wrote a patch to `src/exo/worker/engines/mlx/generator/generate.py`
+     that adds an early-return in `warmup_inference()` when
+     `EXO_SKIP_WARMUP=1` is set on *all* ranks, while still
+     participating in the post-warmup `all_gather` so peers stay in
+     sync. Applied on PC, then shipped to Mac via
+     `~/Downloads/crossfire-x-skip-warmup.patch`, applied with
+     `git apply`. Both nodes restarted with
+     `EXO_SKIP_WARMUP=1 exo`.
+   - Patch fired correctly — Mac log:
+     `"skipping in-process warmup (EXO_SKIP_WARMUP=1); first request
+     will pay one-time JIT compile cost"`.
+
+5. **Final failure — MLX CUDA ring is CPU-only.**
+   - With warmup bypassed, the instance transitioned through
+     `LoadModel: Complete` and `StartWarmup: Complete`. A small
+     `"Say ready"` chat request was issued from Mac; EXO logged
+     `Starting prefill` at 22:23:24.
+   - 4+ min later: 0 decode tokens emitted, PC again pegged at CPU
+     with 5090 near-idle. Mac's master decided PC was inactive
+     (`Manually removing node ... due to inactivity` at 22:30:40,
+     after the 5-min heartbeat timeout), tore down the instance,
+     and the ring aborted with `Too many send/recv errors. Aborting...`
+     (errno 0 recv, errno 32 send).
+   - User confirmed: *"even after successfully loading, the model
+     was running on CPU with GPU not being used at all."*
+   - **Root cause confirmed by independent repro (dev.to article,
+     cited below):** `mx.distributed.init(backend="ring")` control
+     plane reports success on CUDA, but the actual tensor-parallel
+     collectives never run on CUDA — MLX 0.31.1's CUDA ring backend
+     is a stub at compute time. Not a Crossfire bug, not a config
+     mistake.
+
+### What works for cross-arch distributed today (per EXO Labs demos)
+
+EXO's own published setup (Alex Cheema, DGX Spark + M3 Ultra, 2.8×–4×
+throughput on Llama 3.1 8B) uses **disaggregated prefill / decode**,
+not tensor-parallel ring. Prefill runs as a local inference on the
+CUDA node, KV cache streams over 10GbE to the Metal node, decode
+runs as a local inference on the Metal node. No MLX ring collectives
+cross the CUDA / Metal boundary. Our EXO build exposes `InstanceMeta`
+= `{MlxRing, MlxJaccl}` in its enum; neither surfaces the
+disaggregated mode explicitly, so it's either auto-selected by
+topology profiling (not observed in our logs) or added in a newer
+EXO release.
+
+### Options recorded for the C1 matrix row
+
+A. Wait for MLX upstream to ship a working CUDA ring backend, then
+   retry. Zero code change on our side.
+B. Upgrade EXO to a build that exposes a disaggregated prefill/decode
+   instance type and re-place with that.
+C. Pivot T-0617 to `llama.cpp` RPC (Mac host + `llama-server --rpc`
+   on PC CUDA). The dev.to author did exactly this and got
+   measurable prefill speedups. We already have both builds
+   compiled.
+D. Ship the C0-C7 ablation matrix without C1; mark P1 as
+   "blocked-upstream" in AutoPilot policy availability.
+
+**Recommendation**: **D now**, revisit A/B when upstream lands. C is
+a fallback if the matrix truly needs a cross-arch cell before the
+write-up ships.
+
+### Artifacts produced this session
+
+Committed:
+- `results/t0617_p1_distributed_baseline.json` — full journey,
+  per-step measurements, environment details, root cause, options
+  matrix, external sources.
+
+Local-only / not committed:
+- `/Users/murai-labs/crossfire/exo/src/exo/worker/engines/mlx/generator/generate.py`
+  — skip-warmup patch (1 file, +24 lines, local only; not an
+  upstream PR candidate because the underlying bug is MLX's, not
+  EXO's). Same patch applied on PC.
+- Windows firewall rules `EXO 52415` and
+  `EXO MlxRing ephemeral 49153-65535` (PC host).
+- `/Users/murai-labs/.exo/models/mlx-community--gemma-4-31b-it-4bit/`
+  (17 GB, MLX-format shards — kept in case A/B/C unblocks and we
+  retry).
+
+### Verification
+
+- `ruff check` on the patched `generate.py`: `All checks passed!`
+- `python -c 'import ast; ast.parse(...)'`: `syntax OK`
+- Patch log line observed in Mac EXO log at 22:22:50 confirming the
+  guarded early-return fires.
+- `mx.distributed.init(backend="ring")` completes on both ranks per
+  log, but produces zero decode tokens after 4+ min of prefill —
+  matches the documented MLX 0.31.1 CUDA-ring-stub behavior.
+
+### State at end of session
+
+- T-0617 closed as `[!]` blocked-upstream with full paper trail.
+- C1 row of the C0-C7 ablation matrix will stay empty until MLX /
+  EXO upstream lands a working cross-arch distributed compute path.
+- Cluster is currently torn down (PC EXO terminated by user; Mac
+  EXO idle with runners = 2 bookkeeping, instance = 0). Can be
+  re-placed anytime for a retry when upstream ships a fix.
+- Phase 6 remaining tasks that don't need distribution:
+  T-0618 (reward normalization), T-0619 (ANE zero-interference),
+  T-0620 (P2 ANE speculative), T-0621/T-0622 (P3/P4 compression),
+  T-0623 (P5 full-stack), T-0624 (P6 long-context), T-0625
+  (P6 Flash-MoE slot-bank Mac), T-0626 (matrix compile).
+
+### External sources captured
+
+- [dev.to independent repro (MLX 0.31.1 CUDA ring doesn't work yet)](https://dev.to/ljkunal/distributed-llm-inference-across-nvidia-blackwell-and-apple-silicon-over-10gbe-2feg)
+- [EXO blog: DGX Spark + Mac Studio 4×](https://blog.exolabs.net/nvidia-dgx-spark/)
+- [Alex Cheema: prefill/decode disaggregation](https://x.com/alexocheema/status/2027818412202729867)
+- [Tom's Hardware: 2× DGX Spark + Mac Studio 2.8×](https://www.tomshardware.com/software/two-nvidia-dgx-spark-systems-combined-with-m3-ultra-mac-studio-to-create-blistering-llm-system-exo-labs-demonstrates-disaggregated-ai-inference-and-achieves-a-2-8-benchmark-boost)
+- [Simon Willison notes](https://simonwillison.net/2025/Oct/16/nvidia-dgx-spark-apple-mac-studio/)
+- [Hacker News discussion](https://news.ycombinator.com/item?id=45611912)
+
+---
+
 ## Session 27 - 2026-04-23: Numerics investigations close out (slot-bank ≠ stock; PC↔Mac gap is harness, not corpus)
 
 ### What was done

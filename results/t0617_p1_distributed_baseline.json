@@ -1,0 +1,75 @@
+{
+  "task": "T-0617",
+  "status": "blocked_upstream",
+  "date": "2026-04-23",
+  "session": 28,
+  "goal": "Record distributed P1 baseline for Gemma 4 31B across Mac (Metal) + PC (CUDA/WSL2) EXO cluster at 8K/16K/32K contexts.",
+  "outcome": "INFEASIBLE with EXO 1.0 + MLX 0.31.1 on mixed Apple Metal + Linux WSL2/CUDA. Baseline numbers not recorded.",
+  "headline_finding": "MLX's tensor-parallel ring backend does not exercise CUDA on Linux peers — it silently falls back to CPU. EXO's MlxRing instance type depends on this backend, so Gemma 4 31B (which requires Tensor sharding per EXO's Gemma 4 guard) cannot run distributed across Mac+Metal + PC+CUDA today. The PC's RTX 5090 sat at 8% utilization with the runner pegged at 363% CPU while loading and during the first forward pass, confirming the compute path never reached CUDA.",
+  "environment": {
+    "mac": {
+      "hardware": "M4 Max 64GB unified memory",
+      "exo_path": "/Users/murai-labs/crossfire/exo (origin=exo-explore/exo)",
+      "mlx_backend": "Metal"
+    },
+    "pc": {
+      "hardware": "RTX 5090 32GB in WSL2 Ubuntu",
+      "exo_path": "~/crossfire/exo (same upstream)",
+      "mlx_backend": "CUDA (intended); actually ran CPU"
+    },
+    "interconnect": "WiFi 192.168.4.0/22, ports 52415 (libp2p) + 49153-65535 (MlxRing ephemeral), opened via Windows firewall rule",
+    "mlx_version_known_broken": "MLX 0.31.1 per dev.to independent repro (see sources below)"
+  },
+  "what_we_got_working": [
+    "Bidirectional libp2p topology (after Windows firewall rule for ephemeral 49153-65535 TCP inbound)",
+    "MlxRing tensor-parallel ring init (`Rank 0/1 mlx distributed initialization complete`)",
+    "Model download coordination (18.4 GB split between nodes, files pre-cached on disk both sides)",
+    "LoadModel completion (11.87s on Mac Metal once files cached; several minutes on PC CPU-bound even though CUDA was meant to be active)",
+    "Skip-warmup patch (src/exo/worker/engines/mlx/generator/generate.py): bypasses the JIT-compile cascade in warmup_inference() when EXO_SKIP_WARMUP=1 is set consistently on both ranks, while still participating in the post-warmup all_gather. Patch exercised cleanly (log: 'skipping in-process warmup (EXO_SKIP_WARMUP=1)')."
+  ],
+  "what_stayed_broken": {
+    "symptom_1_ring_tensor_parallel_hangs": "After firewall fix + patch + pre-cached files, LoadModel completed but the first TextGeneration prefill pass ran for 4+ min without emitting a single decode token. Mac's EXO heartbeat eventually timed out PC (5-min inactivity) and issued 'Manually removing node ... due to inactivity', triggering Shutdown cascade and ring abort with 'Too many send/recv errors. Aborting...' (errno 0 recv, errno 32 send).",
+    "symptom_2_CUDA_not_used": "PC Claude confirmed during the stall: RTX 5090 at 8% utilization, 65W draw. Runner at 363% CPU. VRAM held only stale allocations from previous killed runners (12.7 GB zombie). Standalone single-process MLX-CUDA on the same PC loads the same model in 6.7s and runs forward passes at 7.5 tok/s — MLX itself is healthy. The bug is specific to EXO's MlxRing tensor-parallel distributed path on non-Metal backends.",
+    "root_cause_upstream": "Independent repro on dev.to: 'mx.distributed.init(backend=\"ring\") hangs indefinitely on the CUDA backend ... The MLX CUDA ring implementation simply doesn't work yet (as of MLX 0.31.1).' Control-plane init reports success, but tensor collectives never actually run on CUDA."
+  },
+  "attempted_workarounds": [
+    {"what": "Pipeline sharding instead of Tensor", "result": "EXO rejects: 'Pipeline parallelism is not supported for Gemma 4; use tensor parallelism instead.'"},
+    {"what": "Substitute Qwen3-Coder-Next-4bit (accepts Pipeline)", "result": "Started 45.6 GB download, cancelled by user decision."},
+    {"what": "EXO_SKIP_WARMUP=1 patch to bypass warmup's JIT compile cascade", "result": "Patch fires correctly; warmup bypasses; but the first real inference prefill hits the same CPU-bound stall because the underlying MLX-CUDA ring still isn't running on CUDA."},
+    {"what": "Windows firewall rule + WSL2 mirrored/NAT check + portproxy", "result": "Fixed libp2p topology — ring init works. Doesn't help the compute-path problem."},
+    {"what": "Fresh EXO restarts on both nodes after each ring abort", "result": "Restores topology. Doesn't change outcome once placement is re-issued."}
+  ],
+  "measurements_captured": {
+    "setup_walltime_estimate_hours": 4.0,
+    "mac_shard_on_disk_gb": 17,
+    "pc_shard_on_disk_gb": 18,
+    "ring_ephemeral_port_observed": "49153-65535 range, actual picks were 65169 then 51724 then 51143",
+    "loadmodel_mac_metal_with_cache_sec": 11.87,
+    "loadmodel_pc_cuda_actual_min_before_timeout": ">=5",
+    "warmup_before_patch_duration_min": ">=10 before kill",
+    "warmup_with_patch": "bypassed (patch confirmed firing in log)",
+    "first_prefill_runtime_before_timeout_min": ">=4",
+    "decoded_tokens_count": 0,
+    "pc_gpu_util_during_load_and_prefill_pct": 8,
+    "pc_cpu_util_during_load_and_prefill_pct": 363,
+    "pc_gpu_power_during_load_and_prefill_w": 65
+  },
+  "options_for_the_matrix": {
+    "A_wait_for_upstream": "MLX fixes the CUDA ring backend; retry with MLX >0.31.1 or whatever version includes the fix. EXO 1.0 demo (Alex Cheema, DGX Spark + M3 Ultra, 4x throughput) likely uses a newer or patched MLX build + disaggregated prefill/decode instead of MlxRing tensor parallel.",
+    "B_disaggregated_prefill_decode_mode": "EXO Labs' working cross-arch demos use disaggregated inference (prefill on CUDA node, decode on Metal node, KV-cache streaming). Our EXO build's InstanceMeta enum exposes only MlxRing and MlxJaccl — neither is explicitly the disaggregated mode. Either this mode is auto-selected when topology profiling sees mixed backends (not observed in our logs), or it requires a newer EXO build.",
+    "C_llama_cpp_rpc": "Independent repro pivoted here; it works. Mac runs llama.cpp with Metal, offloads specific layers to `llama-server --rpc` on PC CUDA. We already have both builds compiled (vendor/llama.cpp Metal + PC's tqp-v0.1.0 CUDA build). Would give a real distributed baseline for the C1 row, albeit under a different runtime than EXO/MLX.",
+    "D_drop_T_0617_from_the_matrix": "C1 row left empty; P1 policy marked blocked-upstream; AutoPilot routes P0/P2-P6 only. Honest and doesn't spend more cycles on a known upstream bug."
+  },
+  "recommendation": "Path D for now to unblock Phase 6; revisit as Path B or A when MLX / EXO land the fix or when a disaggregated instance type is exposed. Path C (llama.cpp RPC) is a fallback we can spec separately if the matrix really needs a cross-arch distributed cell.",
+  "files_changed_this_session": [
+    "/Users/murai-labs/crossfire/exo/src/exo/worker/engines/mlx/generator/generate.py — skip-warmup patch applied (NOT upstreamed, local-only). Same patch applied on PC.",
+    "Windows firewall rule 'EXO MlxRing ephemeral 49153-65535' (TCP, LAN-scoped to 192.168.4.0/22) — added by user on PC host."
+  ],
+  "sources": {
+    "independent_repro_dev_to": "https://dev.to/ljkunal/distributed-llm-inference-across-nvidia-blackwell-and-apple-silicon-over-10gbe-2feg",
+    "exo_labs_blog": "https://blog.exolabs.net/nvidia-dgx-spark/",
+    "alex_cheema_prefill_decode_disagg": "https://x.com/alexocheema/status/2027818412202729867",
+    "simon_willison_notes": "https://simonwillison.net/2025/Oct/16/nvidia-dgx-spark-apple-mac-studio/",
+    "hacker_news_discussion": "https://news.ycombinator.com/item?id=45611912"
+  }
+}

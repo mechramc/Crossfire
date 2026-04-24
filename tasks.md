@@ -1,6 +1,6 @@
 # CROSSFIRE-X Task Ledger
 
-Last updated: 2026-04-23 (Session 27)
+Last updated: 2026-04-23 (Session 28)
 Purpose: Atomic project task list grounded in the current repository state.
 Rule: Only mark a task done when the code, file, or artifact exists in this repo or the required hardware action has been executed and recorded.
 
@@ -155,7 +155,7 @@ Rule: Only mark a task done when the code, file, or artifact exists in this repo
 - [~] T-0616 Record baseline power measurements. PC side DONE Session 23 via nvidia-smi; Mac side DONE Session 25 via `sudo powermetrics`.
 - [x] T-0616.pc PC: nvidia-smi 1 Hz power/util/mem/temp sampling around the T-0615.pc workload — DONE Session 23. 31 samples (5 idle_pre + 21 load + 5 idle_post). **Idle baseline 31.16 W**; **inference peak 504.32 W at 100% util, 42 °C, 31,351 MiB VRAM** (96.2% of 32,606 total); steady-state inference mean (last 4 samples once util hit >90%) **429.29 W**. ΔW vs idle = +398 W (13.8× idle draw). Energy over 21 s load window ≈ 3,110 J (0.864 Wh). Cooling headroom substantial — peak temp 42 °C is far below throttle. VRAM peak confirms the C0 PC budget is tight; longer-context C1–C7 cells will need TriAttention KV reduction to fit. Results JSON: `results/t0616_pc_power.json`. Raw CSV: `results/raw/t0616_pc_power.csv`.
 - [x] T-0616.mac Mac: three variants DONE Session 25 via `sudo powermetrics --samplers cpu_power,gpu_power,ane_power -i 1000` during 64-token decode smokes. Active-sample GPU means: **31B Q8_0 = 31.7 W, 26B-A4B stock = 17.2 W, 26B-A4B slot-bank = 3.3 W** (GPU idles ~95% waiting on NVMe preads). Energy-normalized decode efficiency (tok/J): 31B Q8_0 = 0.46, 26B-A4B stock = **2.92** (best), 26B-A4B slot-bank = 1.69. ANE stayed at 0 mW throughout — no ANE path exercised in these smokes (T-0609a chunked CoreML engine is a separate code path, folded into T-0620 P2 speculative calibration). Summary: `results/t0615_t0616_mac.json`. Logs: `results/raw/t0616_mac_*_decode_power.log` (gitignored).
-- [!] T-0617 Record distributed P1 baseline at 8K / 16K / 32K (C1)
+- [!] T-0617 Record distributed P1 baseline at 8K / 16K / 32K (C1) — BLOCKED upstream Session 28. EXO 1.0 MlxRing tensor-parallel ring backend silently falls back to CPU on Linux/WSL2 CUDA peers (independent repro: dev.to — "MLX CUDA ring implementation simply doesn't work yet as of MLX 0.31.1"). Got topology + libp2p ring up (Windows firewall rule for ephemeral 49153-65535), got MlxRing init to report complete, applied skip-warmup patch to EXO (`src/exo/worker/engines/mlx/generator/generate.py` — bypasses JIT cascade when `EXO_SKIP_WARMUP=1` set on both ranks). LoadModel finished on Mac in 11.87s; on PC CPU ran >5 min and got kicked as inactive. First prefill ran 4+ min with 0 decode tokens, RTX 5090 at 8% util / 65W, runner at 363% CPU. Pipeline sharding rejected by EXO for Gemma 4 ("use tensor parallelism instead"). Options for the C1 row recorded in `results/t0617_p1_distributed_baseline.json`: (A) wait for MLX upstream fix, (B) use disaggregated prefill/decode mode when exposed, (C) pivot to llama.cpp RPC, (D) ship C0-C7 matrix without C1. Recommended: D for now, revisit when MLX/EXO land CUDA ring.
 - [!] T-0618 Lock reward normalization constants from P1 baseline
 - [!] T-0619 Run ANE zero-interference gate (T3 load with no GPU regression)
 - [!] T-0620 Run P2 ANE speculative calibration (C2)
